@@ -2271,20 +2271,98 @@ end
 local function touchDroppedSeed(root, part)
 if not root or not root.Parent or not part or not part.Parent then return false end
 local original = root.CFrame
+local seedFolder = part:FindFirstAncestor("SeedPackSpawnServerLocations")
+local character = player.Character
+local touchParts = {}
+local prompts = {}
+local clickDetectors = {}
+local seenTouchParts = {}
+local seenPrompts = {}
+local seenClicks = {}
+local function worldPosition(instance)
+if instance:IsA("BasePart") then return instance.Position end
+if instance:IsA("Attachment") then return instance.WorldPosition end
+local parentPart = instance:FindFirstAncestorWhichIsA("BasePart")
+return parentPart and parentPart.Position or nil
+end
+local function addNearbyInteraction(instance)
+local position = worldPosition(instance)
+if not position or (position - part.Position).Magnitude > 14 then return end
+if instance:IsA("BasePart") and not seenTouchParts[instance] then
+seenTouchParts[instance] = true
+table.insert(touchParts, instance)
+elseif instance:IsA("ProximityPrompt") and not seenPrompts[instance] then
+seenPrompts[instance] = true
+table.insert(prompts, instance)
+elseif instance:IsA("ClickDetector") and not seenClicks[instance] then
+seenClicks[instance] = true
+table.insert(clickDetectors, instance)
+end
+end
+addNearbyInteraction(part)
+for _, instance in ipairs(part:GetDescendants()) do addNearbyInteraction(instance) end
+if seedFolder then
+for _, instance in ipairs(seedFolder:GetDescendants()) do
+if instance:IsA("ProximityPrompt") or instance:IsA("ClickDetector") or instance:IsA("BasePart") then
+addNearbyInteraction(instance)
+end
+end
+end
+local characterParts = {}
+if character then
+for _, characterPart in ipairs(character:GetDescendants()) do
+if characterPart:IsA("BasePart") then table.insert(characterParts, characterPart) end
+end
+end
 local ok = pcall(function()
 root.AssemblyLinearVelocity = Vector3.zero
 root.AssemblyAngularVelocity = Vector3.zero
-root.CFrame = part.CFrame
+root.CFrame = part.CFrame * CFrame.new(0, 2.5, 0)
 task.wait(0.08)
-if firetouchinterest and part.Parent then
-firetouchinterest(root, part, 0)
-task.wait(0.04)
-firetouchinterest(root, part, 1)
+local deadline = os.clock() + 1.8
+while part.Parent and getDroppedSeedName(part) ~= nil and os.clock() < deadline do
+for _, prompt in ipairs(prompts) do
+if prompt.Parent and prompt.Enabled then
+pcall(function()
+prompt.HoldDuration = 0
+prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 100)
+prompt.RequiresLineOfSight = false
+end)
+if fireproximityprompt then pcall(fireproximityprompt, prompt, 0) end
+pcall(function()
+prompt:InputHoldBegin()
+task.wait(0.025)
+prompt:InputHoldEnd()
+end)
 end
-local deadline = os.clock() + 0.85
-while part.Parent and os.clock() < deadline do
-root.CFrame = part.CFrame
-task.wait(0.06)
+end
+for _, detector in ipairs(clickDetectors) do
+if detector.Parent and fireclickdetector then pcall(fireclickdetector, detector) end
+end
+if #prompts > 0 then
+pcall(function()
+local virtualInput = game:GetService("VirtualInputManager")
+virtualInput:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+task.wait(0.025)
+virtualInput:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+end)
+end
+if firetouchinterest then
+for _, characterPart in ipairs(characterParts) do
+if characterPart.Parent then
+for _, targetPart in ipairs(touchParts) do
+if targetPart.Parent then
+pcall(firetouchinterest, characterPart, targetPart, 0)
+pcall(firetouchinterest, characterPart, targetPart, 1)
+end
+end
+end
+end
+end
+root.CFrame = part.CFrame * CFrame.new(0, -1.25, 0)
+task.wait(0.055)
+root.CFrame = part.CFrame * CFrame.new(0, 1.25, 0)
+task.wait(0.055)
 end
 end)
 if root.Parent then
@@ -2292,7 +2370,12 @@ root.AssemblyLinearVelocity = Vector3.zero
 root.AssemblyAngularVelocity = Vector3.zero
 root.CFrame = original
 end
-return ok and not part.Parent
+if not ok then return false end
+if not part.Parent or getDroppedSeedName(part) == nil then return true end
+for _, prompt in ipairs(prompts) do
+if not prompt.Parent or not prompt.Enabled then return true end
+end
+return false
 end
 local function runAutoCollectDroppedSeed(runId)
 local myGeneration = autoPlantGeneration
