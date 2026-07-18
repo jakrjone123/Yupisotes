@@ -420,6 +420,36 @@ local sellingMethod = "Timer (Min)"
 local sellingInput = 1
 local autoSellEnabled = false
 local autoSellRunId = 0
+local advancedSellMode = "Above"
+local advancedSellTarget = 1.01
+local advancedSellEnabled = false
+local advancedSellRunId = 0
+local doubleTriggerCount = 100
+local doubleUseBackpackMax = false
+local doubleTargetWins = 1
+local doubleEnabled = false
+local doubleRunId = 0
+local doubleCycleActive = false
+local favoriteSelectedRarities = {}
+local favoriteExcludedFruits = {}
+local favoriteSelectedMutations = {}
+local favoriteKg = 0
+local favoriteKgDirection = "Up"
+local autoFavoriteEnabled = false
+local autoFavoriteRunId = 0
+local selectedShovelPlants = {}
+local selectedShovelRarities = {}
+local shovelSpeed = 0
+local autoShovelEnabled = false
+local autoShovelRunId = 0
+local shovelPending = {}
+local selectedShovelFruits = {}
+local selectedShovelFruitRarities = {}
+local shovelFruitKg = 0
+local shovelFruitKgDirection = "Up"
+local autoShovelFruitEnabled = false
+local autoShovelFruitRunId = 0
+local shovelFruitPending = {}
 local dailyDealMode = "Full Inventory"
 local dailyDealCount = 100
 local useDailyDeal = false
@@ -526,6 +556,11 @@ local plantOptions = {
 local harvestPlantOptions = {"All Plant"}
 for index = 2, #plantOptions do
 	table.insert(harvestPlantOptions, plantOptions[index])
+end
+
+local favoriteFruitOptions = {}
+for index = 2, #plantOptions do
+	table.insert(favoriteFruitOptions, plantOptions[index])
 end
 
 local rarityOptions = {
@@ -968,6 +1003,457 @@ local function runAutoSell(runId)
 				lastSaleAt = os.clock()
 			end
 			task.wait(1)
+		end
+	end)
+end
+
+local function getFruitStockEntries()
+	local ok, snapshot = pcall(function()
+		return networking.FruitStock.Request:Fire()
+	end)
+	if not ok or type(snapshot) ~= "table" or type(snapshot.entries) ~= "table" then
+		return nil
+	end
+	return snapshot.entries
+end
+
+local function getAdvancedSellTargets(entries)
+	local targets = {}
+	local seen = {}
+	local function scan(container)
+		if not container then
+			return
+		end
+		for _, item in ipairs(container:GetChildren()) do
+			local fruitName = item:GetAttribute("FruitName") or item:GetAttribute("Fruit")
+			local fruitId = item:GetAttribute("Id") or item:GetAttribute("FruitId")
+			local stock = type(fruitName) == "string" and entries[fruitName] or nil
+			local multiplier = type(stock) == "table" and tonumber(stock.multiplier) or nil
+			local matches = multiplier and (advancedSellMode == "Above"
+				and multiplier >= advancedSellTarget or multiplier <= advancedSellTarget)
+			if matches and fruitId and not seen[fruitId] and item:GetAttribute("IsFavorite") ~= true then
+				seen[fruitId] = true
+				table.insert(targets, {
+					id = fruitId,
+					name = fruitName,
+					multiplier = multiplier,
+				})
+			end
+		end
+	end
+	scan(player:FindFirstChildOfClass("Backpack"))
+	scan(player.Character)
+	return targets
+end
+
+local function runAdvancedSell(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while advancedSellEnabled and advancedSellRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local entries = getFruitStockEntries()
+			if not entries then
+				screenGui:SetAttribute("AdvancedSellStatus", "Price data unavailable")
+			else
+				local targets = getAdvancedSellTargets(entries)
+				local sold = 0
+				for _, target in ipairs(targets) do
+					if not advancedSellEnabled or advancedSellRunId ~= runId then
+						break
+					end
+					local ok, result = pcall(function()
+						return networking.NPCS.SellFruit:Fire(target.id)
+					end)
+					if ok and type(result) == "table" and result.Success == true then
+						sold += 1
+						screenGui:SetAttribute("LastAdvancedSoldFruit", target.name)
+						screenGui:SetAttribute("LastAdvancedSoldMultiplier", target.multiplier)
+					end
+					task.wait(0.12)
+				end
+				screenGui:SetAttribute("LastAdvancedSellCount", sold)
+				screenGui:SetAttribute("AdvancedSellStatus", sold > 0 and "Sold" or "No matching fruit")
+			end
+			task.wait(1)
+		end
+	end)
+end
+
+local function cashOutDoubleOrNothing(status)
+	if not doubleCycleActive then
+		return false
+	end
+	local ok, result = pcall(function()
+		return networking.NPCS.CashOutDoubleOrNothing:Fire()
+	end)
+	doubleCycleActive = false
+	local success = ok and type(result) == "table" and result.Success == true
+	screenGui:SetAttribute("DoubleOrNothingStatus", success and (status or "Cashed out") or "Cash out failed")
+	if success then
+		screenGui:SetAttribute("LastDoubleWins", tonumber(result.Wins) or 0)
+		screenGui:SetAttribute("LastDoubleSellPrice", tonumber(result.SellPrice) or 0)
+		screenGui:SetAttribute("LastDoubleSoldCount", tonumber(result.SoldCount) or 0)
+	end
+	return success
+end
+
+local function stopDoubleOrNothing(status)
+	doubleEnabled = false
+	doubleRunId += 1
+	screenGui:SetAttribute("DoubleOrNothingEnabled", false)
+	if doubleCycleActive then
+		cashOutDoubleOrNothing(status or "Stopped and cashed out")
+	else
+		screenGui:SetAttribute("DoubleOrNothingStatus", status or "Stopped")
+	end
+end
+
+local function runDoubleOrNothing(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while doubleEnabled and doubleRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local fruitCount = previewSellInventory()
+			local requiredCount = doubleUseBackpackMax
+				and (tonumber(player:GetAttribute("MaxFruitCapacity")) or 100) or doubleTriggerCount
+			screenGui:SetAttribute("DoubleBackpackCount", fruitCount)
+			screenGui:SetAttribute("DoubleRequiredCount", requiredCount)
+
+			if fruitCount <= 0 or fruitCount < requiredCount then
+				screenGui:SetAttribute("DoubleOrNothingStatus", "Waiting for " .. tostring(requiredCount) .. " fruits")
+				task.wait(1)
+				continue
+			end
+
+			local wins = 0
+			screenGui:SetAttribute("DoubleOrNothingStatus", "Rolling")
+			repeat
+				local ok, result = pcall(function()
+					return networking.NPCS.DoubleOrNothing:Fire()
+				end)
+				if not ok or type(result) ~= "table" then
+					if doubleCycleActive then
+						cashOutDoubleOrNothing("Error, cashed out")
+					else
+						screenGui:SetAttribute("DoubleOrNothingStatus", "Roll failed")
+					end
+					break
+				end
+
+				if result.Busted == true then
+					doubleCycleActive = false
+					wins = tonumber(result.Wins) or wins
+					screenGui:SetAttribute("LastDoubleWins", wins)
+					screenGui:SetAttribute("DoubleOrNothingStatus", "Busted")
+					break
+				elseif result.Won == true then
+					doubleCycleActive = true
+					wins = tonumber(result.Wins) or (wins + 1)
+					screenGui:SetAttribute("CurrentDoubleWins", wins)
+					screenGui:SetAttribute("CurrentDoublePot", tonumber(result.Pot) or 0)
+					screenGui:SetAttribute("DoubleOrNothingStatus", "Won " .. tostring(wins) .. "/" .. tostring(doubleTargetWins))
+					if wins >= doubleTargetWins then
+						cashOutDoubleOrNothing("Target reached, cashed out")
+						break
+					end
+				else
+					local reason = tostring(result.Reason or "Unavailable")
+					if doubleCycleActive then
+						cashOutDoubleOrNothing("Stopped: " .. reason)
+					else
+						screenGui:SetAttribute("DoubleOrNothingStatus", reason)
+					end
+					break
+				end
+				task.wait(0.5)
+			until not doubleEnabled or doubleRunId ~= runId
+
+			if (not doubleEnabled or doubleRunId ~= runId) and doubleCycleActive then
+				cashOutDoubleOrNothing("Stopped and cashed out")
+			end
+			task.wait(1)
+		end
+	end)
+end
+
+local function favoriteMutationMatches(mutationText)
+	if selectionCount(favoriteSelectedMutations) == 0 then
+		return true
+	end
+	if type(mutationText) ~= "string" or mutationText == "" then
+		return favoriteSelectedMutations.Normal == true
+	end
+	for mutation in string.gmatch(mutationText, "[^%+%,]+") do
+		mutation = string.gsub(mutation, "^%s*(.-)%s*$", "%1")
+		if favoriteSelectedMutations[mutation] then
+			return true
+		end
+	end
+	return false
+end
+
+local function getFavoriteTargets(onlyFavorited)
+	local targets = {}
+	local seen = {}
+	local function scan(container)
+		if not container then
+			return
+		end
+		for _, item in ipairs(container:GetChildren()) do
+			local fruitName = item:GetAttribute("FruitName") or item:GetAttribute("Fruit")
+			local fruitId = item:GetAttribute("Id") or item:GetAttribute("FruitId")
+			local isFavorite = item:GetAttribute("IsFavorite") == true
+			if type(fruitName) == "string" and fruitId and not seen[fruitId]
+				and ((onlyFavorited and isFavorite) or (not onlyFavorited and not isFavorite)) then
+				local rarity = seedRarities[fruitName] or "Common"
+				local weight = tonumber(item:GetAttribute("Weight")) or 0
+				local rarityAllowed = selectionCount(favoriteSelectedRarities) == 0
+					or favoriteSelectedRarities[rarity] == true
+				local mutationAllowed = favoriteMutationMatches(item:GetAttribute("Mutation"))
+				local weightAllowed = favoriteKgDirection == "Up" and weight >= favoriteKg or weight < favoriteKg
+				local nameAllowed = favoriteExcludedFruits[fruitName] ~= true
+				if onlyFavorited or (rarityAllowed and mutationAllowed and weightAllowed and nameAllowed) then
+					seen[fruitId] = true
+					table.insert(targets, {id = fruitId, tool = item, name = fruitName})
+				end
+			end
+		end
+	end
+	scan(player:FindFirstChildOfClass("Backpack"))
+	scan(player.Character)
+	return targets
+end
+
+local function setFruitFavorite(target, state)
+	local previous = target.tool:GetAttribute("IsFavorite") == true
+	target.tool:SetAttribute("IsFavorite", state and true or nil)
+	local ok, result = pcall(function()
+		return networking.Backpack.SetFruitFavorite:Fire(target.id, state)
+	end)
+	local success = ok and result ~= false
+	if not success and target.tool.Parent then
+		target.tool:SetAttribute("IsFavorite", previous and true or nil)
+	end
+	return success
+end
+
+local function runAutoFavorite(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while autoFavoriteEnabled and autoFavoriteRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local targets = getFavoriteTargets(false)
+			local favorited = 0
+			for _, target in ipairs(targets) do
+				if not autoFavoriteEnabled or autoFavoriteRunId ~= runId then
+					break
+				end
+				if setFruitFavorite(target, true) then
+					favorited += 1
+					screenGui:SetAttribute("LastFavoritedFruit", target.name)
+				end
+				task.wait(0.08)
+			end
+			screenGui:SetAttribute("LastAutoFavoriteCount", favorited)
+			screenGui:SetAttribute("AutoFavoriteStatus", favorited > 0 and "Favorited" or "Waiting for matching fruit")
+			task.wait(1)
+		end
+	end)
+end
+
+local function unfavoriteAllFruit()
+	autoFavoriteEnabled = false
+	autoFavoriteRunId += 1
+	screenGui:SetAttribute("AutoFavoriteEnabled", false)
+	local targets = getFavoriteTargets(true)
+	local changed = 0
+	for _, target in ipairs(targets) do
+		if setFruitFavorite(target, false) then
+			changed += 1
+		end
+		task.wait(0.08)
+	end
+	screenGui:SetAttribute("LastUnfavoriteCount", changed)
+	screenGui:SetAttribute("AutoFavoriteStatus", "Unfavorited " .. tostring(changed))
+	return changed
+end
+
+local function getShovelTool()
+	for _, container in ipairs({player.Character, player:FindFirstChildOfClass("Backpack")}) do
+		if container then
+			for _, item in ipairs(container:GetChildren()) do
+				if item:IsA("Tool") and type(item:GetAttribute("Shovel")) == "string" then
+					return item
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function getShovelTargets(plot)
+	local targets = {}
+	local plants = plot and plot:FindFirstChild("Plants")
+	if not plants or selectionCount(selectedShovelPlants) == 0 then
+		return targets
+	end
+	for _, model in ipairs(plants:GetChildren()) do
+		local plantId = model:GetAttribute("PlantId")
+		local seedName = model:GetAttribute("SeedName")
+		local ownerId = tonumber(model:GetAttribute("UserId"))
+		local rarity = type(seedName) == "string" and (seedRarities[seedName] or "Common") or nil
+		local rarityAllowed = selectionCount(selectedShovelRarities) == 0
+			or selectedShovelRarities[rarity] == true
+		local pendingUntil = plantId and shovelPending[plantId] or nil
+		if pendingUntil and os.clock() >= pendingUntil then
+			shovelPending[plantId] = nil
+			pendingUntil = nil
+		end
+		if plantId and seedName and ownerId == player.UserId and selectedShovelPlants[seedName]
+			and rarityAllowed and not pendingUntil then
+			table.insert(targets, {id = plantId, name = seedName})
+		end
+	end
+	table.sort(targets, function(a, b)
+		return a.name < b.name
+	end)
+	return targets
+end
+
+local function runAutoShovel(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while autoShovelEnabled and autoShovelRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local shovel = getShovelTool()
+			local plot = getPlayerPlot()
+			local targets = getShovelTargets(plot)
+			if not shovel then
+				screenGui:SetAttribute("AutoShovelStatus", "Shovel unavailable")
+			elseif #targets == 0 then
+				screenGui:SetAttribute("AutoShovelStatus", selectionCount(selectedShovelPlants) == 0
+					and "Select at least one plant" or "Waiting for matching plants")
+			else
+				local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+				if humanoid and shovel.Parent ~= player.Character then
+					humanoid:EquipTool(shovel)
+					task.wait(0.08)
+				end
+				local removed = 0
+				for _, target in ipairs(targets) do
+					if not autoShovelEnabled or autoShovelRunId ~= runId then
+						break
+					end
+					if shovel.Parent ~= player.Character and humanoid then
+						humanoid:EquipTool(shovel)
+						task.wait(0.05)
+					end
+					shovelPending[target.id] = os.clock() + 2
+					local ok = pcall(function()
+						networking.Shovel.UseShovel:Fire(target.id, "", shovel:GetAttribute("Shovel"), shovel)
+					end)
+					if ok then
+						removed += 1
+						screenGui:SetAttribute("LastShoveledPlant", target.name)
+					end
+					task.wait(math.max(0.08, shovelSpeed * 0.1))
+				end
+				screenGui:SetAttribute("LastAutoShovelCount", removed)
+				screenGui:SetAttribute("AutoShovelStatus", removed > 0 and "Shoveling" or "Waiting")
+			end
+			task.wait(0.5)
+		end
+	end)
+end
+
+local function getShovelFruitTargets(plot)
+	local targets = {}
+	local seen = {}
+	local plants = plot and plot:FindFirstChild("Plants")
+	if not plants or selectionCount(selectedShovelFruits) == 0 then
+		return targets
+	end
+	for _, plant in ipairs(plants:GetChildren()) do
+		if tonumber(plant:GetAttribute("UserId")) == player.UserId then
+			for _, model in ipairs(plant:GetDescendants()) do
+				local fruitId = model:GetAttribute("FruitId")
+				local plantId = model:GetAttribute("PlantId") or plant:GetAttribute("PlantId")
+				local fruitName = model:GetAttribute("CorePartName") or plant:GetAttribute("SeedName")
+				local ownerId = tonumber(model:GetAttribute("UserId"))
+				local pendingUntil = fruitId and shovelFruitPending[fruitId] or nil
+				if pendingUntil and os.clock() >= pendingUntil then
+					shovelFruitPending[fruitId] = nil
+					pendingUntil = nil
+				end
+				if fruitId and plantId and fruitName and ownerId == player.UserId and not seen[fruitId]
+					and selectedShovelFruits[fruitName] and not pendingUntil then
+					local rarity = seedRarities[fruitName] or "Common"
+					local rarityAllowed = selectionCount(selectedShovelFruitRarities) == 0
+						or selectedShovelFruitRarities[rarity] == true
+					local weight = getHarvestWeight(model, fruitName)
+					local weightAllowed = shovelFruitKgDirection == "Up"
+						and weight >= shovelFruitKg or weight < shovelFruitKg
+					if rarityAllowed and weightAllowed then
+						seen[fruitId] = true
+						table.insert(targets, {
+							plantId = plantId,
+							fruitId = fruitId,
+							name = fruitName,
+							weight = weight,
+						})
+					end
+				end
+			end
+		end
+	end
+	return targets
+end
+
+local function runAutoShovelFruit(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while autoShovelFruitEnabled and autoShovelFruitRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local shovel = getShovelTool()
+			local targets = getShovelFruitTargets(getPlayerPlot())
+			if not shovel then
+				screenGui:SetAttribute("AutoShovelFruitStatus", "Shovel unavailable")
+			elseif #targets == 0 then
+				screenGui:SetAttribute("AutoShovelFruitStatus", selectionCount(selectedShovelFruits) == 0
+					and "Select at least one fruit" or "Waiting for matching fruits")
+			else
+				local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+				if humanoid and shovel.Parent ~= player.Character then
+					humanoid:EquipTool(shovel)
+					task.wait(0.08)
+				end
+				local removed = 0
+				for _, target in ipairs(targets) do
+					if not autoShovelFruitEnabled or autoShovelFruitRunId ~= runId then break end
+					if shovel.Parent ~= player.Character and humanoid then
+						humanoid:EquipTool(shovel)
+						task.wait(0.05)
+					end
+					shovelFruitPending[target.fruitId] = os.clock() + 2
+					local ok = pcall(function()
+						networking.Shovel.UseShovel:Fire(
+							target.plantId,
+							target.fruitId,
+							shovel:GetAttribute("Shovel"),
+							shovel
+						)
+					end)
+					if ok then
+						removed += 1
+						screenGui:SetAttribute("LastShoveledFruit", target.name)
+						screenGui:SetAttribute("LastShoveledFruitKg", target.weight)
+					end
+					task.wait(math.max(0.08, shovelSpeed * 0.1))
+				end
+				screenGui:SetAttribute("LastAutoShovelFruitCount", removed)
+				screenGui:SetAttribute("AutoShovelFruitStatus", removed > 0 and "Shoveling fruits" or "Waiting")
+			end
+			task.wait(0.5)
 		end
 	end)
 end
@@ -2782,6 +3268,27 @@ local function showFarm()
 		autoSellEnabled = not autoSellEnabled
 		autoSellRunId += 1
 		if autoSellEnabled then
+			advancedSellEnabled = false
+			advancedSellRunId += 1
+			stopDoubleOrNothing("Stopped by Auto Sell")
+			screenGui:SetAttribute("AdvancedSellEnabled", false)
+			screenGui:SetAttribute("AdvancedSellStatus", "Stopped by Auto Sell")
+			local advancedToggleRef = screenGui:FindFirstChild("StartAutoSellAdvancedToggle", true)
+			if advancedToggleRef then
+				advancedToggleRef.BackgroundColor3 = rgb(48, 46, 58)
+				local knob = advancedToggleRef:FindFirstChildWhichIsA("Frame")
+				if knob then
+					knob.Position = UDim2.fromOffset(3, 3)
+				end
+			end
+			local doubleToggleRef = screenGui:FindFirstChild("StartDoubleOrNothingToggle", true)
+			if doubleToggleRef then
+				doubleToggleRef.BackgroundColor3 = rgb(48, 46, 58)
+				local knob = doubleToggleRef:FindFirstChildWhichIsA("Frame")
+				if knob then
+					knob.Position = UDim2.fromOffset(3, 3)
+				end
+			end
 			screenGui:SetAttribute("AutoSellStatus", "Waiting for rule")
 			runAutoSell(autoSellRunId)
 		else
@@ -2812,6 +3319,505 @@ local function showFarm()
 	screenGui:SetAttribute("SellingMethod", sellingMethod)
 	screenGui:SetAttribute("SellingInput", sellingInput)
 
+	do
+	local advancedSellHeader = Instance.new("TextButton")
+	advancedSellHeader.Name = "AutoSellAdvancedHeader"
+	advancedSellHeader.AutoButtonColor = false
+	advancedSellHeader.Text = ""
+	advancedSellHeader.BackgroundColor3 = palette.card
+	advancedSellHeader.BorderSizePixel = 0
+	advancedSellHeader.Size = UDim2.new(1, 0, 0, 31)
+	advancedSellHeader.LayoutOrder = 6
+	advancedSellHeader.Parent = list
+	corner(advancedSellHeader, 4)
+
+	local advancedSellHeaderText = label(advancedSellHeader, "Auto Sell Advanced", 13, palette.text, true)
+	advancedSellHeaderText.Position = UDim2.fromOffset(10, 0)
+	advancedSellHeaderText.Size = UDim2.new(1, -40, 1, 0)
+
+	local advancedSellArrow = label(advancedSellHeader, "v", 14, rgb(210, 210, 216), true)
+	advancedSellArrow.Position = UDim2.new(1, -28, 0, 0)
+	advancedSellArrow.Size = UDim2.fromOffset(20, 31)
+	advancedSellArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+	local advancedSellAccent = Instance.new("Frame")
+	advancedSellAccent.BackgroundColor3 = palette.accent
+	advancedSellAccent.BorderSizePixel = 0
+	advancedSellAccent.Position = UDim2.new(0, 0, 1, -2)
+	advancedSellAccent.Size = UDim2.new(1, 0, 0, 2)
+	advancedSellAccent.Parent = advancedSellHeader
+
+	local advancedSellContent = Instance.new("Frame")
+	advancedSellContent.Name = "AutoSellAdvancedContent"
+	advancedSellContent.BackgroundTransparency = 1
+	advancedSellContent.BorderSizePixel = 0
+	advancedSellContent.ClipsDescendants = true
+	advancedSellContent.Size = UDim2.new(1, 0, 0, 0)
+	advancedSellContent.LayoutOrder = 7
+	advancedSellContent.Parent = list
+
+	local advancedModeRow = Instance.new("Frame")
+	advancedModeRow.BackgroundColor3 = palette.card
+	advancedModeRow.BorderSizePixel = 0
+	advancedModeRow.Position = UDim2.fromOffset(0, 0)
+	advancedModeRow.Size = UDim2.new(1, 0, 0, 58)
+	advancedModeRow.Parent = advancedSellContent
+	corner(advancedModeRow, 4)
+
+	local advancedModeTitle = label(advancedModeRow, "Multiplier Mode", 12, palette.text, true)
+	advancedModeTitle.Position = UDim2.fromOffset(10, 5)
+	advancedModeTitle.Size = UDim2.new(0.62, -10, 0, 18)
+
+	local advancedModeDescription = label(advancedModeRow, "Fruit that matches this target will be sold. Other fruit is kept.", 10, palette.muted, false)
+	advancedModeDescription.Position = UDim2.fromOffset(10, 22)
+	advancedModeDescription.Size = UDim2.new(0.62, -10, 0, 31)
+	advancedModeDescription.TextWrapped = true
+	advancedModeDescription.TextYAlignment = Enum.TextYAlignment.Top
+
+	local advancedModeButton = Instance.new("TextButton")
+	advancedModeButton.AutoButtonColor = false
+	advancedModeButton.Text = advancedSellMode
+	advancedModeButton.Font = Enum.Font.GothamBold
+	advancedModeButton.TextSize = 11
+	advancedModeButton.TextColor3 = palette.text
+	advancedModeButton.TextXAlignment = Enum.TextXAlignment.Left
+	advancedModeButton.BackgroundColor3 = rgb(31, 26, 43)
+	advancedModeButton.BorderSizePixel = 0
+	advancedModeButton.Position = UDim2.new(0.64, 0, 0, 8)
+	advancedModeButton.Size = UDim2.new(0.36, -7, 0, 32)
+	advancedModeButton.Parent = advancedModeRow
+	corner(advancedModeButton, 4)
+	stroke(advancedModeButton, rgb(72, 48, 96), 0.45, 1)
+
+	local advancedModeChevron = label(advancedModeButton, "v", 13, rgb(210, 210, 216), true)
+	advancedModeChevron.Position = UDim2.new(1, -24, 0, 0)
+	advancedModeChevron.Size = UDim2.fromOffset(20, 32)
+	advancedModeChevron.TextXAlignment = Enum.TextXAlignment.Center
+
+	local advancedTargetRow = Instance.new("Frame")
+	advancedTargetRow.BackgroundColor3 = palette.card
+	advancedTargetRow.BorderSizePixel = 0
+	advancedTargetRow.Position = UDim2.fromOffset(0, 64)
+	advancedTargetRow.Size = UDim2.new(1, 0, 0, 40)
+	advancedTargetRow.Parent = advancedSellContent
+	corner(advancedTargetRow, 4)
+
+	local advancedTargetTitle = label(advancedTargetRow, "Target Multiplier", 12, palette.text, true)
+	advancedTargetTitle.Position = UDim2.fromOffset(10, 0)
+	advancedTargetTitle.Size = UDim2.new(0.64, -10, 1, 0)
+
+	local advancedTargetInput = Instance.new("TextBox")
+	advancedTargetInput.ClearTextOnFocus = false
+	advancedTargetInput.Text = tostring(advancedSellTarget)
+	advancedTargetInput.PlaceholderText = "1.01"
+	advancedTargetInput.Font = Enum.Font.GothamMedium
+	advancedTargetInput.TextSize = 11
+	advancedTargetInput.TextColor3 = palette.text
+	advancedTargetInput.TextXAlignment = Enum.TextXAlignment.Left
+	advancedTargetInput.BackgroundColor3 = rgb(31, 26, 43)
+	advancedTargetInput.BorderSizePixel = 0
+	advancedTargetInput.Position = UDim2.new(0.64, 0, 0, 5)
+	advancedTargetInput.Size = UDim2.new(0.36, -7, 0, 30)
+	advancedTargetInput.Parent = advancedTargetRow
+	corner(advancedTargetInput, 4)
+	stroke(advancedTargetInput, rgb(125, 49, 166), 0.2, 1)
+	local advancedTargetPadding = Instance.new("UIPadding")
+	advancedTargetPadding.PaddingLeft = UDim.new(0, 8)
+	advancedTargetPadding.PaddingRight = UDim.new(0, 8)
+	advancedTargetPadding.Parent = advancedTargetInput
+
+	local advancedToggleRow = Instance.new("Frame")
+	advancedToggleRow.BackgroundColor3 = palette.card
+	advancedToggleRow.BorderSizePixel = 0
+	advancedToggleRow.Position = UDim2.fromOffset(0, 110)
+	advancedToggleRow.Size = UDim2.new(1, 0, 0, 40)
+	advancedToggleRow.Parent = advancedSellContent
+	corner(advancedToggleRow, 4)
+
+	local advancedToggleTitle = label(advancedToggleRow, "Start Auto Sell Advanced", 12, palette.text, true)
+	advancedToggleTitle.Position = UDim2.fromOffset(10, 0)
+	advancedToggleTitle.Size = UDim2.new(0.78, -10, 1, 0)
+
+	local advancedToggle = Instance.new("TextButton")
+	advancedToggle.Name = "StartAutoSellAdvancedToggle"
+	advancedToggle.AutoButtonColor = false
+	advancedToggle.Text = ""
+	advancedToggle.BackgroundColor3 = advancedSellEnabled and palette.accent or rgb(48, 46, 58)
+	advancedToggle.BorderSizePixel = 0
+	advancedToggle.Position = UDim2.new(1, -50, 0.5, -11)
+	advancedToggle.Size = UDim2.fromOffset(38, 22)
+	advancedToggle.Parent = advancedToggleRow
+	corner(advancedToggle, 11)
+	stroke(advancedToggle, rgb(116, 70, 152), advancedSellEnabled and 0.15 or 0.45, 1)
+
+	local advancedToggleKnob = Instance.new("Frame")
+	advancedToggleKnob.BackgroundColor3 = rgb(239, 239, 243)
+	advancedToggleKnob.BorderSizePixel = 0
+	advancedToggleKnob.Position = advancedSellEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+	advancedToggleKnob.Size = UDim2.fromOffset(16, 16)
+	advancedToggleKnob.Parent = advancedToggle
+	corner(advancedToggleKnob, 8)
+
+	local advancedModePanel = Instance.new("Frame")
+	advancedModePanel.BackgroundColor3 = rgb(18, 18, 25)
+	advancedModePanel.BorderSizePixel = 0
+	advancedModePanel.ClipsDescendants = true
+	advancedModePanel.Position = UDim2.new(0.64, 0, 0, 44)
+	advancedModePanel.Size = UDim2.new(0.36, -7, 0, 0)
+	advancedModePanel.ZIndex = 120
+	advancedModePanel.Parent = advancedSellContent
+	corner(advancedModePanel, 4)
+	stroke(advancedModePanel, rgb(91, 39, 124), 0.1, 1)
+
+	local advancedModeLayout = Instance.new("UIListLayout")
+	advancedModeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	advancedModeLayout.Padding = UDim.new(0, 2)
+	advancedModeLayout.Parent = advancedModePanel
+
+	local advancedCategoryOpen = false
+	local advancedModeOpen = false
+	local advancedBaseHeight = 150
+	local function setAdvancedModeOpen(open)
+		advancedModeOpen = open
+		advancedModeChevron.Rotation = open and 180 or 0
+		advancedModePanel.Size = UDim2.new(0.36, -7, 0, open and 58 or 0)
+	end
+
+	for index, modeName in ipairs({"Above", "Below"}) do
+		local option = Instance.new("TextButton")
+		option.AutoButtonColor = false
+		option.Text = modeName
+		option.Font = Enum.Font.GothamMedium
+		option.TextSize = 11
+		option.TextColor3 = palette.text
+		option.TextXAlignment = Enum.TextXAlignment.Left
+		option.BackgroundColor3 = modeName == advancedSellMode and rgb(59, 24, 83) or rgb(18, 18, 25)
+		option.BorderSizePixel = 0
+		option.Size = UDim2.new(1, 0, 0, 28)
+		option.LayoutOrder = index
+		option.ZIndex = 121
+		option.Parent = advancedModePanel
+		local optionPadding = Instance.new("UIPadding")
+		optionPadding.PaddingLeft = UDim.new(0, 10)
+		optionPadding.Parent = option
+		option.MouseButton1Click:Connect(function()
+			advancedSellMode = modeName
+			advancedModeButton.Text = modeName
+			screenGui:SetAttribute("AdvancedSellMode", modeName)
+			setAdvancedModeOpen(false)
+		end)
+	end
+
+	local function commitAdvancedTarget()
+		local normalizedText = string.gsub(advancedTargetInput.Text, ",", ".")
+		local value = tonumber(normalizedText) or 1.01
+		advancedSellTarget = math.max(0, value)
+		advancedTargetInput.Text = tostring(advancedSellTarget)
+		screenGui:SetAttribute("AdvancedSellTarget", advancedSellTarget)
+	end
+
+	advancedTargetInput.FocusLost:Connect(commitAdvancedTarget)
+	advancedModeButton.MouseButton1Click:Connect(function()
+		setAdvancedModeOpen(not advancedModeOpen)
+	end)
+	advancedToggle.MouseButton1Click:Connect(function()
+		commitAdvancedTarget()
+		advancedSellEnabled = not advancedSellEnabled
+		advancedSellRunId += 1
+		if advancedSellEnabled then
+			autoSellEnabled = false
+			autoSellRunId += 1
+			stopDoubleOrNothing("Stopped by Advanced Sell")
+			screenGui:SetAttribute("AutoSellEnabled", false)
+			screenGui:SetAttribute("AutoSellStatus", "Stopped by Advanced Sell")
+			startSellingToggle.BackgroundColor3 = rgb(48, 46, 58)
+			sellingToggleKnob.Position = UDim2.fromOffset(3, 3)
+			screenGui:SetAttribute("AdvancedSellStatus", "Checking prices")
+			runAdvancedSell(advancedSellRunId)
+		else
+			screenGui:SetAttribute("AdvancedSellStatus", "Stopped")
+		end
+		screenGui:SetAttribute("AdvancedSellEnabled", advancedSellEnabled)
+		TweenService:Create(advancedToggle, TweenInfo.new(0.18), {
+			BackgroundColor3 = advancedSellEnabled and palette.accent or rgb(48, 46, 58),
+		}):Play()
+		TweenService:Create(advancedToggleKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Position = advancedSellEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+		}):Play()
+	end)
+	advancedSellHeader.MouseButton1Click:Connect(function()
+		advancedCategoryOpen = not advancedCategoryOpen
+		if not advancedCategoryOpen then
+			setAdvancedModeOpen(false)
+		end
+		TweenService:Create(advancedSellContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Size = UDim2.new(1, 0, 0, advancedCategoryOpen and advancedBaseHeight or 0),
+		}):Play()
+		TweenService:Create(advancedSellArrow, TweenInfo.new(0.18), {
+			Rotation = advancedCategoryOpen and 180 or 0,
+		}):Play()
+	end)
+
+	screenGui:SetAttribute("AdvancedSellEnabled", advancedSellEnabled)
+	screenGui:SetAttribute("AdvancedSellMode", advancedSellMode)
+	screenGui:SetAttribute("AdvancedSellTarget", advancedSellTarget)
+	end
+
+	do
+	local doubleHeader = Instance.new("TextButton")
+	doubleHeader.Name = "AutoDoubleOrNothingHeader"
+	doubleHeader.AutoButtonColor = false
+	doubleHeader.Text = ""
+	doubleHeader.BackgroundColor3 = palette.card
+	doubleHeader.BorderSizePixel = 0
+	doubleHeader.Size = UDim2.new(1, 0, 0, 31)
+	doubleHeader.LayoutOrder = 10
+	doubleHeader.Parent = list
+	corner(doubleHeader, 4)
+
+	local doubleHeaderText = label(doubleHeader, "Auto Double or Nothing", 13, palette.text, true)
+	doubleHeaderText.Position = UDim2.fromOffset(10, 0)
+	doubleHeaderText.Size = UDim2.new(1, -40, 1, 0)
+
+	local doubleArrow = label(doubleHeader, "v", 14, rgb(210, 210, 216), true)
+	doubleArrow.Position = UDim2.new(1, -28, 0, 0)
+	doubleArrow.Size = UDim2.fromOffset(20, 31)
+	doubleArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+	local doubleAccent = Instance.new("Frame")
+	doubleAccent.BackgroundColor3 = palette.accent
+	doubleAccent.BorderSizePixel = 0
+	doubleAccent.Position = UDim2.new(0, 0, 1, -2)
+	doubleAccent.Size = UDim2.new(1, 0, 0, 2)
+	doubleAccent.Parent = doubleHeader
+
+	local doubleContent = Instance.new("Frame")
+	doubleContent.Name = "AutoDoubleOrNothingContent"
+	doubleContent.BackgroundTransparency = 1
+	doubleContent.BorderSizePixel = 0
+	doubleContent.ClipsDescendants = true
+	doubleContent.Size = UDim2.new(1, 0, 0, 0)
+	doubleContent.LayoutOrder = 11
+	doubleContent.Parent = list
+
+	local reachRow = Instance.new("Frame")
+	reachRow.BackgroundColor3 = palette.card
+	reachRow.BorderSizePixel = 0
+	reachRow.Position = UDim2.fromOffset(0, 0)
+	reachRow.Size = UDim2.new(1, 0, 0, 58)
+	reachRow.Parent = doubleContent
+	corner(reachRow, 4)
+
+	local reachTitle = label(reachRow, "When Backpack Reach Fruit", 12, palette.text, true)
+	reachTitle.Position = UDim2.fromOffset(10, 5)
+	reachTitle.Size = UDim2.new(0.64, -10, 0, 18)
+
+	local reachDescription = label(reachRow, "Start Double or Nothing when fruit inventory reaches this amount.", 10, palette.muted, false)
+	reachDescription.Position = UDim2.fromOffset(10, 22)
+	reachDescription.Size = UDim2.new(0.64, -10, 0, 31)
+	reachDescription.TextWrapped = true
+	reachDescription.TextYAlignment = Enum.TextYAlignment.Top
+
+	local reachInput = Instance.new("TextBox")
+	reachInput.Name = "DoubleReachInput"
+	reachInput.ClearTextOnFocus = false
+	reachInput.Text = tostring(doubleTriggerCount)
+	reachInput.Font = Enum.Font.GothamMedium
+	reachInput.TextSize = 11
+	reachInput.TextColor3 = palette.text
+	reachInput.TextXAlignment = Enum.TextXAlignment.Left
+	reachInput.BackgroundColor3 = rgb(31, 26, 43)
+	reachInput.BorderSizePixel = 0
+	reachInput.Position = UDim2.new(0.64, 0, 0, 8)
+	reachInput.Size = UDim2.new(0.36, -7, 0, 32)
+	reachInput.Parent = reachRow
+	corner(reachInput, 4)
+	stroke(reachInput, rgb(125, 49, 166), 0.2, 1)
+	padding(reachInput, 8, 0, 8, 0)
+
+	local maxRow = Instance.new("Frame")
+	maxRow.BackgroundColor3 = palette.card
+	maxRow.BorderSizePixel = 0
+	maxRow.Position = UDim2.fromOffset(0, 64)
+	maxRow.Size = UDim2.new(1, 0, 0, 58)
+	maxRow.Parent = doubleContent
+	corner(maxRow, 4)
+
+	local maxTitle = label(maxRow, "When Backpack Max", 12, palette.text, true)
+	maxTitle.Position = UDim2.fromOffset(10, 5)
+	maxTitle.Size = UDim2.new(0.76, -10, 0, 18)
+
+	local maxDescription = label(maxRow, "Ignore the amount input and start only when the fruit backpack is full.", 10, palette.muted, false)
+	maxDescription.Position = UDim2.fromOffset(10, 22)
+	maxDescription.Size = UDim2.new(0.76, -10, 0, 31)
+	maxDescription.TextWrapped = true
+	maxDescription.TextYAlignment = Enum.TextYAlignment.Top
+
+	local maxToggle = Instance.new("TextButton")
+	maxToggle.Name = "DoubleBackpackMaxToggle"
+	maxToggle.AutoButtonColor = false
+	maxToggle.Text = ""
+	maxToggle.BackgroundColor3 = doubleUseBackpackMax and palette.accent or rgb(48, 46, 58)
+	maxToggle.BorderSizePixel = 0
+	maxToggle.Position = UDim2.new(1, -50, 0.5, -11)
+	maxToggle.Size = UDim2.fromOffset(38, 22)
+	maxToggle.Parent = maxRow
+	corner(maxToggle, 11)
+	stroke(maxToggle, rgb(116, 70, 152), doubleUseBackpackMax and 0.15 or 0.45, 1)
+
+	local maxKnob = Instance.new("Frame")
+	maxKnob.BackgroundColor3 = rgb(239, 239, 243)
+	maxKnob.BorderSizePixel = 0
+	maxKnob.Position = doubleUseBackpackMax and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+	maxKnob.Size = UDim2.fromOffset(16, 16)
+	maxKnob.Parent = maxToggle
+	corner(maxKnob, 8)
+
+	local countRow = Instance.new("Frame")
+	countRow.BackgroundColor3 = palette.card
+	countRow.BorderSizePixel = 0
+	countRow.Position = UDim2.fromOffset(0, 128)
+	countRow.Size = UDim2.new(1, 0, 0, 48)
+	countRow.Parent = doubleContent
+	corner(countRow, 4)
+
+	local countTitle = label(countRow, "Double or Nothing Count", 12, palette.text, true)
+	countTitle.Position = UDim2.fromOffset(10, 5)
+	countTitle.Size = UDim2.new(0.64, -10, 0, 18)
+
+	local countDescription = label(countRow, "How many successful doubles to chase before cashing out.", 10, palette.muted, false)
+	countDescription.Position = UDim2.fromOffset(10, 22)
+	countDescription.Size = UDim2.new(0.64, -10, 0, 21)
+	countDescription.TextWrapped = true
+
+	local countInput = Instance.new("TextBox")
+	countInput.Name = "DoubleCountInput"
+	countInput.ClearTextOnFocus = false
+	countInput.Text = tostring(doubleTargetWins)
+	countInput.Font = Enum.Font.GothamMedium
+	countInput.TextSize = 11
+	countInput.TextColor3 = palette.text
+	countInput.TextXAlignment = Enum.TextXAlignment.Left
+	countInput.BackgroundColor3 = rgb(31, 26, 43)
+	countInput.BorderSizePixel = 0
+	countInput.Position = UDim2.new(0.64, 0, 0, 7)
+	countInput.Size = UDim2.new(0.36, -7, 0, 32)
+	countInput.Parent = countRow
+	corner(countInput, 4)
+	stroke(countInput, rgb(125, 49, 166), 0.2, 1)
+	padding(countInput, 8, 0, 8, 0)
+
+	local startDoubleRow = Instance.new("Frame")
+	startDoubleRow.BackgroundColor3 = palette.card
+	startDoubleRow.BorderSizePixel = 0
+	startDoubleRow.Position = UDim2.fromOffset(0, 182)
+	startDoubleRow.Size = UDim2.new(1, 0, 0, 58)
+	startDoubleRow.Parent = doubleContent
+	corner(startDoubleRow, 4)
+
+	local startDoubleTitle = label(startDoubleRow, "Start Double or Nothing", 12, palette.text, true)
+	startDoubleTitle.Position = UDim2.fromOffset(10, 5)
+	startDoubleTitle.Size = UDim2.new(0.76, -10, 0, 18)
+
+	local startDoubleDescription = label(startDoubleRow, "Auto rolls until the target win count is reached, then cashes out. A bust stops the cycle.", 10, palette.muted, false)
+	startDoubleDescription.Position = UDim2.fromOffset(10, 22)
+	startDoubleDescription.Size = UDim2.new(0.76, -10, 0, 31)
+	startDoubleDescription.TextWrapped = true
+	startDoubleDescription.TextYAlignment = Enum.TextYAlignment.Top
+
+	local startDoubleToggle = Instance.new("TextButton")
+	startDoubleToggle.Name = "StartDoubleOrNothingToggle"
+	startDoubleToggle.AutoButtonColor = false
+	startDoubleToggle.Text = ""
+	startDoubleToggle.BackgroundColor3 = doubleEnabled and palette.accent or rgb(48, 46, 58)
+	startDoubleToggle.BorderSizePixel = 0
+	startDoubleToggle.Position = UDim2.new(1, -50, 0.5, -11)
+	startDoubleToggle.Size = UDim2.fromOffset(38, 22)
+	startDoubleToggle.Parent = startDoubleRow
+	corner(startDoubleToggle, 11)
+	stroke(startDoubleToggle, rgb(116, 70, 152), doubleEnabled and 0.15 or 0.45, 1)
+
+	local startDoubleKnob = Instance.new("Frame")
+	startDoubleKnob.BackgroundColor3 = rgb(239, 239, 243)
+	startDoubleKnob.BorderSizePixel = 0
+	startDoubleKnob.Position = doubleEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+	startDoubleKnob.Size = UDim2.fromOffset(16, 16)
+	startDoubleKnob.Parent = startDoubleToggle
+	corner(startDoubleKnob, 8)
+
+	local doubleCategoryOpen = false
+	local doubleBaseHeight = 240
+	local function commitDoubleInputs()
+		doubleTriggerCount = math.max(1, math.floor(tonumber(reachInput.Text) or 100))
+		doubleTargetWins = math.max(1, math.floor(tonumber(countInput.Text) or 1))
+		reachInput.Text = tostring(doubleTriggerCount)
+		countInput.Text = tostring(doubleTargetWins)
+		screenGui:SetAttribute("DoubleTriggerCount", doubleTriggerCount)
+		screenGui:SetAttribute("DoubleTargetWins", doubleTargetWins)
+	end
+
+	reachInput.FocusLost:Connect(commitDoubleInputs)
+	countInput.FocusLost:Connect(commitDoubleInputs)
+	maxToggle.MouseButton1Click:Connect(function()
+		doubleUseBackpackMax = not doubleUseBackpackMax
+		screenGui:SetAttribute("DoubleUseBackpackMax", doubleUseBackpackMax)
+		TweenService:Create(maxToggle, TweenInfo.new(0.18), {
+			BackgroundColor3 = doubleUseBackpackMax and palette.accent or rgb(48, 46, 58),
+		}):Play()
+		TweenService:Create(maxKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Position = doubleUseBackpackMax and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+		}):Play()
+	end)
+	startDoubleToggle.MouseButton1Click:Connect(function()
+		commitDoubleInputs()
+		if doubleEnabled then
+			stopDoubleOrNothing("Stopped and cashed out")
+		else
+			autoSellEnabled = false
+			autoSellRunId += 1
+			advancedSellEnabled = false
+			advancedSellRunId += 1
+			screenGui:SetAttribute("AutoSellEnabled", false)
+			screenGui:SetAttribute("AdvancedSellEnabled", false)
+			startSellingToggle.BackgroundColor3 = rgb(48, 46, 58)
+			sellingToggleKnob.Position = UDim2.fromOffset(3, 3)
+			local advancedToggleRef = screenGui:FindFirstChild("StartAutoSellAdvancedToggle", true)
+			if advancedToggleRef then
+				advancedToggleRef.BackgroundColor3 = rgb(48, 46, 58)
+				local knob = advancedToggleRef:FindFirstChildWhichIsA("Frame")
+				if knob then
+					knob.Position = UDim2.fromOffset(3, 3)
+				end
+			end
+			doubleEnabled = true
+			doubleRunId += 1
+			screenGui:SetAttribute("DoubleOrNothingEnabled", true)
+			screenGui:SetAttribute("DoubleOrNothingStatus", "Waiting for inventory")
+			runDoubleOrNothing(doubleRunId)
+		end
+		TweenService:Create(startDoubleToggle, TweenInfo.new(0.18), {
+			BackgroundColor3 = doubleEnabled and palette.accent or rgb(48, 46, 58),
+		}):Play()
+		TweenService:Create(startDoubleKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Position = doubleEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+		}):Play()
+	end)
+	doubleHeader.MouseButton1Click:Connect(function()
+		doubleCategoryOpen = not doubleCategoryOpen
+		TweenService:Create(doubleContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Size = UDim2.new(1, 0, 0, doubleCategoryOpen and doubleBaseHeight or 0),
+		}):Play()
+		TweenService:Create(doubleArrow, TweenInfo.new(0.18), {
+			Rotation = doubleCategoryOpen and 180 or 0,
+		}):Play()
+	end)
+
+	screenGui:SetAttribute("DoubleTriggerCount", doubleTriggerCount)
+	screenGui:SetAttribute("DoubleUseBackpackMax", doubleUseBackpackMax)
+	screenGui:SetAttribute("DoubleTargetWins", doubleTargetWins)
+	screenGui:SetAttribute("DoubleOrNothingEnabled", doubleEnabled)
+	end
+
 	local dailyHeader = Instance.new("TextButton")
 	dailyHeader.Name = "DailyDealHeader"
 	dailyHeader.AutoButtonColor = false
@@ -2819,7 +3825,7 @@ local function showFarm()
 	dailyHeader.BackgroundColor3 = palette.card
 	dailyHeader.BorderSizePixel = 0
 	dailyHeader.Size = UDim2.new(1, 0, 0, 31)
-	dailyHeader.LayoutOrder = 6
+	dailyHeader.LayoutOrder = 8
 	dailyHeader.Parent = list
 	corner(dailyHeader, 4)
 
@@ -2845,7 +3851,7 @@ local function showFarm()
 	dailyContent.BorderSizePixel = 0
 	dailyContent.ClipsDescendants = true
 	dailyContent.Size = UDim2.new(1, 0, 0, 0)
-	dailyContent.LayoutOrder = 7
+	dailyContent.LayoutOrder = 9
 	dailyContent.Parent = list
 
 	local dailyHelpRow = Instance.new("Frame")
@@ -3094,6 +4100,982 @@ local function showFarm()
 	screenGui:SetAttribute("UseDailyDeal", useDailyDeal)
 	screenGui:SetAttribute("DailyDealMode", dailyDealMode)
 	screenGui:SetAttribute("DailyDealCount", dailyDealCount)
+
+	do
+	local function createAutoFavoriteSection()
+	local favoriteHeader = Instance.new("TextButton")
+	favoriteHeader.Name = "AutoFavoriteHeader"
+	favoriteHeader.AutoButtonColor = false
+	favoriteHeader.Text = ""
+	favoriteHeader.BackgroundColor3 = palette.card
+	favoriteHeader.BorderSizePixel = 0
+	favoriteHeader.Size = UDim2.new(1, 0, 0, 31)
+	favoriteHeader.LayoutOrder = 12
+	favoriteHeader.Parent = list
+	corner(favoriteHeader, 4)
+
+	local favoriteHeaderText = label(favoriteHeader, "Auto Favorite", 13, palette.text, true)
+	favoriteHeaderText.Position = UDim2.fromOffset(10, 0)
+	favoriteHeaderText.Size = UDim2.new(1, -40, 1, 0)
+
+	local favoriteArrow = label(favoriteHeader, "v", 14, rgb(210, 210, 216), true)
+	favoriteArrow.Position = UDim2.new(1, -28, 0, 0)
+	favoriteArrow.Size = UDim2.fromOffset(20, 31)
+	favoriteArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+	local favoriteAccent = Instance.new("Frame")
+	favoriteAccent.BackgroundColor3 = palette.accent
+	favoriteAccent.BorderSizePixel = 0
+	favoriteAccent.Position = UDim2.new(0, 0, 1, -2)
+	favoriteAccent.Size = UDim2.new(1, 0, 0, 2)
+	favoriteAccent.Parent = favoriteHeader
+
+	local favoriteContent = Instance.new("Frame")
+	favoriteContent.Name = "AutoFavoriteContent"
+	favoriteContent.BackgroundTransparency = 1
+	favoriteContent.BorderSizePixel = 0
+	favoriteContent.ClipsDescendants = true
+	favoriteContent.Size = UDim2.new(1, 0, 0, 0)
+	favoriteContent.LayoutOrder = 13
+	favoriteContent.Parent = list
+
+	local filters = {}
+	local function makeFavoriteFilter(name, titleText, descriptionText, y, choices, selection, zIndex)
+		local entry = {open = false}
+		local row = Instance.new("Frame")
+		row.Name = name .. "Row"
+		row.BackgroundColor3 = palette.card
+		row.BorderSizePixel = 0
+		row.Position = UDim2.fromOffset(0, y)
+		row.Size = UDim2.new(1, 0, 0, 48)
+		row.Parent = favoriteContent
+		corner(row, 4)
+
+		local titleLabel = label(row, titleText, 12, palette.text, true)
+		titleLabel.Position = UDim2.fromOffset(10, 4)
+		titleLabel.Size = UDim2.new(0.62, -10, 0, 18)
+		local descriptionLabel = label(row, descriptionText, 10, palette.muted, false)
+		descriptionLabel.Position = UDim2.fromOffset(10, 21)
+		descriptionLabel.Size = UDim2.new(0.62, -10, 0, 20)
+		descriptionLabel.TextWrapped = true
+
+		local button = Instance.new("TextButton")
+		button.Name = name .. "Button"
+		button.AutoButtonColor = false
+		button.Text = "Select Options"
+		button.Font = Enum.Font.GothamBold
+		button.TextSize = 11
+		button.TextColor3 = palette.muted
+		button.TextXAlignment = Enum.TextXAlignment.Left
+		button.BackgroundColor3 = rgb(31, 26, 43)
+		button.BorderSizePixel = 0
+		button.Position = UDim2.new(0.62, 0, 0, 8)
+		button.Size = UDim2.new(0.38, -7, 0, 32)
+		button.Parent = row
+		corner(button, 4)
+		stroke(button, rgb(72, 48, 96), 0.45, 1)
+		padding(button, 10, 0, 30, 0)
+
+		local buttonArrow = label(button, "v", 13, rgb(210, 210, 216), true)
+		buttonArrow.Position = UDim2.new(1, -30, 0, 0)
+		buttonArrow.Size = UDim2.fromOffset(20, 32)
+		buttonArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+		local panel = Instance.new("Frame")
+		panel.Name = name .. "Dropdown"
+		panel.BackgroundColor3 = rgb(18, 18, 25)
+		panel.BorderSizePixel = 0
+		panel.ClipsDescendants = true
+		panel.Position = UDim2.new(0.62, 0, 0, y + 44)
+		panel.Size = UDim2.new(0.38, -7, 0, 0)
+		panel.ZIndex = zIndex
+		panel.Parent = favoriteContent
+		corner(panel, 4)
+		stroke(panel, rgb(91, 39, 124), 0.1, 1)
+
+		local search = Instance.new("TextBox")
+		search.Name = name .. "Search"
+		search.ClearTextOnFocus = false
+		search.PlaceholderText = "Search"
+		search.Text = ""
+		search.Font = Enum.Font.GothamMedium
+		search.TextSize = 11
+		search.TextColor3 = palette.text
+		search.PlaceholderColor3 = palette.muted
+		search.BackgroundColor3 = rgb(35, 27, 48)
+		search.BorderSizePixel = 0
+		search.Position = UDim2.fromOffset(4, 4)
+		search.Size = UDim2.new(1, -8, 0, 26)
+		search.ZIndex = zIndex + 1
+		search.Parent = panel
+		corner(search, 3)
+
+		local optionsList = Instance.new("ScrollingFrame")
+		optionsList.BackgroundTransparency = 1
+		optionsList.BorderSizePixel = 0
+		optionsList.CanvasSize = UDim2.fromOffset(0, 0)
+		optionsList.ScrollBarImageColor3 = palette.accent
+		optionsList.ScrollBarThickness = 3
+		optionsList.ScrollingDirection = Enum.ScrollingDirection.Y
+		optionsList.Position = UDim2.fromOffset(4, 34)
+		optionsList.Size = UDim2.new(1, -8, 1, -38)
+		optionsList.ZIndex = zIndex + 1
+		optionsList.Parent = panel
+
+		local optionsLayout = Instance.new("UIListLayout")
+		optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		optionsLayout.Padding = UDim.new(0, 2)
+		optionsLayout.Parent = optionsList
+
+		local optionButtons = {}
+		local function refreshSummary()
+			local count = selectionCount(selection)
+			button.Text = count > 0 and (tostring(count) .. " Selected") or "Select Options"
+			button.TextColor3 = count > 0 and palette.text or palette.muted
+		end
+		local function updateCanvas()
+			local visible = 0
+			for _, option in ipairs(optionButtons) do
+				if option.Visible then
+					visible += 1
+				end
+			end
+			optionsList.CanvasSize = UDim2.fromOffset(0, math.max(0, visible * 28 - 2))
+		end
+
+		for index, choice in ipairs(choices) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = choice
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 11
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, 0, 0, 26)
+			option.LayoutOrder = index
+			option.ZIndex = zIndex + 2
+			option.Parent = optionsList
+			corner(option, 3)
+			padding(option, 10, 0, 0, 0)
+			local function renderSelected()
+				local selected = selection[choice] == true
+				option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+				option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+				option.BackgroundTransparency = selected and 0.1 or 0.35
+			end
+			renderSelected()
+			option.MouseButton1Click:Connect(function()
+				selection[choice] = not selection[choice] or nil
+				renderSelected()
+				refreshSummary()
+			end)
+			table.insert(optionButtons, option)
+		end
+		refreshSummary()
+		updateCanvas()
+
+		search:GetPropertyChangedSignal("Text"):Connect(function()
+			local query = string.lower(search.Text)
+			for _, option in ipairs(optionButtons) do
+				option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+			end
+			optionsList.CanvasPosition = Vector2.zero
+			updateCanvas()
+		end)
+
+		function entry.setOpen(open)
+			entry.open = open
+			panel.Size = UDim2.new(0.38, -7, 0, open and 178 or 0)
+			buttonArrow.Rotation = open and 180 or 0
+		end
+		button.MouseButton1Click:Connect(function()
+			for _, other in ipairs(filters) do
+				if other ~= entry then
+					other.setOpen(false)
+				end
+			end
+			entry.setOpen(not entry.open)
+		end)
+		table.insert(filters, entry)
+		return entry
+	end
+
+	makeFavoriteFilter("FavoriteRarity", "Favorite If Fruit Rarity", "Favorite fruits from these rarities.", 0, rarityOptions, favoriteSelectedRarities, 130)
+	makeFavoriteFilter("FavoriteExcludeFruit", "Exclude Favorite If Fruit Name", "Skip these fruit names when favoriting.", 54, favoriteFruitOptions, favoriteExcludedFruits, 140)
+	makeFavoriteFilter("FavoriteMutation", "Favorite If Fruit Mutation", "Favorite fruits with these mutations.", 108, harvestMutationOptions, favoriteSelectedMutations, 150)
+
+	local kgRow = Instance.new("Frame")
+	kgRow.BackgroundColor3 = palette.card
+	kgRow.BorderSizePixel = 0
+	kgRow.Position = UDim2.fromOffset(0, 162)
+	kgRow.Size = UDim2.new(1, 0, 0, 48)
+	kgRow.Parent = favoriteContent
+	corner(kgRow, 4)
+	local kgTitle = label(kgRow, "Input Your Kg", 12, palette.text, true)
+	kgTitle.Position = UDim2.fromOffset(10, 4)
+	kgTitle.Size = UDim2.new(0.62, -10, 0, 18)
+	local kgDescription = label(kgRow, "Set the KG number for this filter.", 10, palette.muted, false)
+	kgDescription.Position = UDim2.fromOffset(10, 21)
+	kgDescription.Size = UDim2.new(0.62, -10, 0, 20)
+
+	local kgInput = Instance.new("TextBox")
+	kgInput.Name = "FavoriteKgInput"
+	kgInput.ClearTextOnFocus = false
+	kgInput.Text = tostring(favoriteKg)
+	kgInput.Font = Enum.Font.GothamMedium
+	kgInput.TextSize = 11
+	kgInput.TextColor3 = palette.text
+	kgInput.TextXAlignment = Enum.TextXAlignment.Left
+	kgInput.BackgroundColor3 = rgb(31, 26, 43)
+	kgInput.BorderSizePixel = 0
+	kgInput.Position = UDim2.new(0.62, 0, 0, 8)
+	kgInput.Size = UDim2.new(0.38, -7, 0, 32)
+	kgInput.Parent = kgRow
+	corner(kgInput, 4)
+	stroke(kgInput, rgb(125, 49, 166), 0.2, 1)
+	padding(kgInput, 8, 0, 8, 0)
+
+	local directionRow = Instance.new("Frame")
+	directionRow.BackgroundColor3 = palette.card
+	directionRow.BorderSizePixel = 0
+	directionRow.Position = UDim2.fromOffset(0, 216)
+	directionRow.Size = UDim2.new(1, 0, 0, 48)
+	directionRow.Parent = favoriteContent
+	corner(directionRow, 4)
+	local directionTitle = label(directionRow, "KG Direction", 12, palette.text, true)
+	directionTitle.Position = UDim2.fromOffset(10, 4)
+	directionTitle.Size = UDim2.new(0.62, -10, 0, 18)
+	local directionDescription = label(directionRow, "Up means this KG and higher. Below means lower than this KG.", 10, palette.muted, false)
+	directionDescription.Position = UDim2.fromOffset(10, 21)
+	directionDescription.Size = UDim2.new(0.62, -10, 0, 22)
+	directionDescription.TextWrapped = true
+
+	local directionButton = Instance.new("TextButton")
+	directionButton.Name = "FavoriteKgDirectionButton"
+	directionButton.AutoButtonColor = false
+	directionButton.Text = favoriteKgDirection
+	directionButton.Font = Enum.Font.GothamBold
+	directionButton.TextSize = 11
+	directionButton.TextColor3 = palette.text
+	directionButton.TextXAlignment = Enum.TextXAlignment.Left
+	directionButton.BackgroundColor3 = rgb(31, 26, 43)
+	directionButton.BorderSizePixel = 0
+	directionButton.Position = UDim2.new(0.62, 0, 0, 8)
+	directionButton.Size = UDim2.new(0.38, -7, 0, 32)
+	directionButton.Parent = directionRow
+	corner(directionButton, 4)
+	stroke(directionButton, rgb(72, 48, 96), 0.45, 1)
+	padding(directionButton, 10, 0, 30, 0)
+	local directionArrow = label(directionButton, "v", 13, rgb(210, 210, 216), true)
+	directionArrow.Position = UDim2.new(1, -30, 0, 0)
+	directionArrow.Size = UDim2.fromOffset(20, 32)
+	directionArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+	local directionPanel = Instance.new("Frame")
+	directionPanel.Name = "FavoriteKgDirectionDropdown"
+	directionPanel.BackgroundColor3 = rgb(18, 18, 25)
+	directionPanel.BorderSizePixel = 0
+	directionPanel.ClipsDescendants = true
+	directionPanel.Position = UDim2.new(0.62, 0, 0, 260)
+	directionPanel.Size = UDim2.new(0.38, -7, 0, 0)
+	directionPanel.ZIndex = 160
+	directionPanel.Parent = favoriteContent
+	corner(directionPanel, 4)
+	stroke(directionPanel, rgb(91, 39, 124), 0.1, 1)
+	local directionLayout = Instance.new("UIListLayout")
+	directionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	directionLayout.Padding = UDim.new(0, 2)
+	directionLayout.Parent = directionPanel
+	local directionOpen = false
+	for index, directionName in ipairs({"Up", "Below"}) do
+		local option = Instance.new("TextButton")
+		option.AutoButtonColor = false
+		option.Text = directionName
+		option.Font = Enum.Font.GothamMedium
+		option.TextSize = 11
+		option.TextColor3 = palette.text
+		option.TextXAlignment = Enum.TextXAlignment.Left
+		option.BackgroundColor3 = rgb(18, 18, 25)
+		option.BorderSizePixel = 0
+		option.Size = UDim2.new(1, 0, 0, 28)
+		option.LayoutOrder = index
+		option.ZIndex = 161
+		option.Parent = directionPanel
+		padding(option, 10, 0, 0, 0)
+		option.MouseButton1Click:Connect(function()
+			favoriteKgDirection = directionName
+			directionButton.Text = directionName
+			directionOpen = false
+			directionPanel.Size = UDim2.new(0.38, -7, 0, 0)
+			directionArrow.Rotation = 0
+			screenGui:SetAttribute("FavoriteKgDirection", directionName)
+		end)
+	end
+	directionButton.MouseButton1Click:Connect(function()
+		for _, filter in ipairs(filters) do
+			filter.setOpen(false)
+		end
+		directionOpen = not directionOpen
+		directionPanel.Size = UDim2.new(0.38, -7, 0, directionOpen and 58 or 0)
+		directionArrow.Rotation = directionOpen and 180 or 0
+	end)
+
+	local startRow = Instance.new("Frame")
+	startRow.BackgroundColor3 = palette.card
+	startRow.BorderSizePixel = 0
+	startRow.Position = UDim2.fromOffset(0, 270)
+	startRow.Size = UDim2.new(1, 0, 0, 48)
+	startRow.Parent = favoriteContent
+	corner(startRow, 4)
+	local startTitle = label(startRow, "Start Favorite Fruit", 12, palette.text, true)
+	startTitle.Position = UDim2.fromOffset(10, 4)
+	startTitle.Size = UDim2.new(0.76, -10, 0, 18)
+	local startDescription = label(startRow, "Automatically favorites matching fruits in your inventory.", 10, palette.muted, false)
+	startDescription.Position = UDim2.fromOffset(10, 21)
+	startDescription.Size = UDim2.new(0.76, -10, 0, 20)
+
+	local startFavoriteToggle = Instance.new("TextButton")
+	startFavoriteToggle.Name = "StartFavoriteFruitToggle"
+	startFavoriteToggle.AutoButtonColor = false
+	startFavoriteToggle.Text = ""
+	startFavoriteToggle.BackgroundColor3 = autoFavoriteEnabled and palette.accent or rgb(48, 46, 58)
+	startFavoriteToggle.BorderSizePixel = 0
+	startFavoriteToggle.Position = UDim2.new(1, -50, 0.5, -11)
+	startFavoriteToggle.Size = UDim2.fromOffset(38, 22)
+	startFavoriteToggle.Parent = startRow
+	corner(startFavoriteToggle, 11)
+	stroke(startFavoriteToggle, rgb(116, 70, 152), autoFavoriteEnabled and 0.15 or 0.45, 1)
+	local favoriteKnob = Instance.new("Frame")
+	favoriteKnob.BackgroundColor3 = rgb(239, 239, 243)
+	favoriteKnob.BorderSizePixel = 0
+	favoriteKnob.Position = autoFavoriteEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+	favoriteKnob.Size = UDim2.fromOffset(16, 16)
+	favoriteKnob.Parent = startFavoriteToggle
+	corner(favoriteKnob, 8)
+
+	local unfavoriteButton = Instance.new("TextButton")
+	unfavoriteButton.Name = "UnfavoriteAllFruitButton"
+	unfavoriteButton.AutoButtonColor = false
+	unfavoriteButton.Text = "Unfavorite All Fruit"
+	unfavoriteButton.Font = Enum.Font.GothamBold
+	unfavoriteButton.TextSize = 11
+	unfavoriteButton.TextColor3 = palette.text
+	unfavoriteButton.BackgroundColor3 = rgb(28, 33, 28)
+	unfavoriteButton.BorderSizePixel = 0
+	unfavoriteButton.Position = UDim2.fromOffset(0, 324)
+	unfavoriteButton.Size = UDim2.new(1, 0, 0, 40)
+	unfavoriteButton.Parent = favoriteContent
+	corner(unfavoriteButton, 4)
+
+	local favoriteCategoryOpen = false
+	local favoriteBaseHeight = 364
+	local function commitFavoriteKg()
+		local normalizedText = string.gsub(kgInput.Text, ",", ".")
+		favoriteKg = math.max(0, tonumber(normalizedText) or 0)
+		kgInput.Text = tostring(favoriteKg)
+		screenGui:SetAttribute("FavoriteKg", favoriteKg)
+	end
+	kgInput.FocusLost:Connect(commitFavoriteKg)
+	startFavoriteToggle.MouseButton1Click:Connect(function()
+		commitFavoriteKg()
+		autoFavoriteEnabled = not autoFavoriteEnabled
+		autoFavoriteRunId += 1
+		if autoFavoriteEnabled then
+			screenGui:SetAttribute("AutoFavoriteStatus", "Checking inventory")
+			runAutoFavorite(autoFavoriteRunId)
+		else
+			screenGui:SetAttribute("AutoFavoriteStatus", "Stopped")
+		end
+		screenGui:SetAttribute("AutoFavoriteEnabled", autoFavoriteEnabled)
+		TweenService:Create(startFavoriteToggle, TweenInfo.new(0.18), {
+			BackgroundColor3 = autoFavoriteEnabled and palette.accent or rgb(48, 46, 58),
+		}):Play()
+		TweenService:Create(favoriteKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Position = autoFavoriteEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+		}):Play()
+	end)
+	unfavoriteButton.MouseButton1Click:Connect(function()
+		task.spawn(function()
+			unfavoriteAllFruit()
+			startFavoriteToggle.BackgroundColor3 = rgb(48, 46, 58)
+			favoriteKnob.Position = UDim2.fromOffset(3, 3)
+		end)
+	end)
+	favoriteHeader.MouseButton1Click:Connect(function()
+		favoriteCategoryOpen = not favoriteCategoryOpen
+		if not favoriteCategoryOpen then
+			for _, filter in ipairs(filters) do
+				filter.setOpen(false)
+			end
+			directionOpen = false
+			directionPanel.Size = UDim2.new(0.38, -7, 0, 0)
+			directionArrow.Rotation = 0
+		end
+		TweenService:Create(favoriteContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Size = UDim2.new(1, 0, 0, favoriteCategoryOpen and favoriteBaseHeight or 0),
+		}):Play()
+		TweenService:Create(favoriteArrow, TweenInfo.new(0.18), {
+			Rotation = favoriteCategoryOpen and 180 or 0,
+		}):Play()
+	end)
+
+	screenGui:SetAttribute("FavoriteKg", favoriteKg)
+	screenGui:SetAttribute("FavoriteKgDirection", favoriteKgDirection)
+	screenGui:SetAttribute("AutoFavoriteEnabled", autoFavoriteEnabled)
+	end
+	createAutoFavoriteSection()
+	end
+
+	do
+	local function createAutoShovelSection()
+		local shovelHeader = Instance.new("TextButton")
+		shovelHeader.Name = "AutoShovelHeader"
+		shovelHeader.AutoButtonColor = false
+		shovelHeader.Text = ""
+		shovelHeader.BackgroundColor3 = palette.card
+		shovelHeader.BorderSizePixel = 0
+		shovelHeader.Size = UDim2.new(1, 0, 0, 31)
+		shovelHeader.LayoutOrder = 14
+		shovelHeader.Parent = list
+		corner(shovelHeader, 4)
+
+		local headerText = label(shovelHeader, "Auto Shovel", 13, palette.text, true)
+		headerText.Position = UDim2.fromOffset(10, 0)
+		headerText.Size = UDim2.new(1, -40, 1, 0)
+		local headerArrow = label(shovelHeader, "v", 14, rgb(210, 210, 216), true)
+		headerArrow.Position = UDim2.new(1, -28, 0, 0)
+		headerArrow.Size = UDim2.fromOffset(20, 31)
+		headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local headerAccent = Instance.new("Frame")
+		headerAccent.BackgroundColor3 = palette.accent
+		headerAccent.BorderSizePixel = 0
+		headerAccent.Position = UDim2.new(0, 0, 1, -2)
+		headerAccent.Size = UDim2.new(1, 0, 0, 2)
+		headerAccent.Parent = shovelHeader
+
+		local shovelContent = Instance.new("Frame")
+		shovelContent.Name = "AutoShovelContent"
+		shovelContent.BackgroundTransparency = 1
+		shovelContent.BorderSizePixel = 0
+		shovelContent.ClipsDescendants = true
+		shovelContent.Size = UDim2.new(1, 0, 0, 0)
+		shovelContent.LayoutOrder = 15
+		shovelContent.Parent = list
+
+		local shovelFilters = {}
+		local function makeShovelFilter(name, titleText, descriptionText, y, choices, selectedValues, zIndex)
+			local entry = {open = false}
+			local row = Instance.new("Frame")
+			row.BackgroundColor3 = palette.card
+			row.BorderSizePixel = 0
+			row.Position = UDim2.fromOffset(0, y)
+			row.Size = UDim2.new(1, 0, 0, 48)
+			row.Parent = shovelContent
+			corner(row, 4)
+			local rowTitle = label(row, titleText, 12, palette.text, true)
+			rowTitle.Position = UDim2.fromOffset(10, 4)
+			rowTitle.Size = UDim2.new(0.62, -10, 0, 18)
+			local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+			rowDescription.Position = UDim2.fromOffset(10, 21)
+			rowDescription.Size = UDim2.new(0.62, -10, 0, 20)
+
+			local button = Instance.new("TextButton")
+			button.Name = name .. "Button"
+			button.AutoButtonColor = false
+			button.Font = Enum.Font.GothamBold
+			button.TextSize = 11
+			button.TextColor3 = palette.text
+			button.TextXAlignment = Enum.TextXAlignment.Left
+			button.BackgroundColor3 = rgb(31, 26, 43)
+			button.BorderSizePixel = 0
+			button.Position = UDim2.new(0.62, 0, 0, 8)
+			button.Size = UDim2.new(0.38, -7, 0, 32)
+			button.Parent = row
+			corner(button, 4)
+			stroke(button, rgb(72, 48, 96), 0.45, 1)
+			padding(button, 10, 0, 30, 0)
+			local buttonArrow = label(button, "v", 13, rgb(210, 210, 216), true)
+			buttonArrow.Position = UDim2.new(1, -30, 0, 0)
+			buttonArrow.Size = UDim2.fromOffset(20, 32)
+			buttonArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+			local panel = Instance.new("Frame")
+			panel.Name = name .. "Dropdown"
+			panel.BackgroundColor3 = rgb(18, 18, 25)
+			panel.BorderSizePixel = 0
+			panel.ClipsDescendants = true
+			panel.Position = UDim2.new(0.62, 0, 0, y + 44)
+			panel.Size = UDim2.new(0.38, -7, 0, 0)
+			panel.ZIndex = zIndex
+			panel.Parent = shovelContent
+			corner(panel, 4)
+			stroke(panel, rgb(91, 39, 124), 0.1, 1)
+
+			local search = Instance.new("TextBox")
+			search.Name = name .. "Search"
+			search.ClearTextOnFocus = false
+			search.PlaceholderText = "Search"
+			search.Text = ""
+			search.Font = Enum.Font.GothamMedium
+			search.TextSize = 11
+			search.TextColor3 = palette.text
+			search.PlaceholderColor3 = palette.muted
+			search.BackgroundColor3 = rgb(35, 27, 48)
+			search.BorderSizePixel = 0
+			search.Position = UDim2.fromOffset(4, 4)
+			search.Size = UDim2.new(1, -8, 0, 26)
+			search.ZIndex = zIndex + 1
+			search.Parent = panel
+			corner(search, 3)
+
+			local optionsList = Instance.new("ScrollingFrame")
+			optionsList.BackgroundTransparency = 1
+			optionsList.BorderSizePixel = 0
+			optionsList.CanvasSize = UDim2.fromOffset(0, 0)
+			optionsList.ScrollBarImageColor3 = palette.accent
+			optionsList.ScrollBarThickness = 3
+			optionsList.ScrollingDirection = Enum.ScrollingDirection.Y
+			optionsList.Position = UDim2.fromOffset(4, 34)
+			optionsList.Size = UDim2.new(1, -8, 1, -38)
+			optionsList.ZIndex = zIndex + 1
+			optionsList.Parent = panel
+			local optionsLayout = Instance.new("UIListLayout")
+			optionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			optionsLayout.Padding = UDim.new(0, 2)
+			optionsLayout.Parent = optionsList
+
+			local optionButtons = {}
+			local function refreshSummary()
+				local names = {}
+				for _, choice in ipairs(choices) do
+					if selectedValues[choice] then
+						table.insert(names, choice)
+					end
+				end
+				if #names == 0 then
+					button.Text = "Select Options"
+					button.TextColor3 = palette.muted
+				elseif #names <= 2 then
+					button.Text = table.concat(names, ", ")
+					button.TextColor3 = palette.text
+				else
+					button.Text = names[1] .. ", " .. names[2] .. ",..."
+					button.TextColor3 = palette.text
+				end
+			end
+			local function updateCanvas()
+				local visible = 0
+				for _, option in ipairs(optionButtons) do
+					if option.Visible then visible += 1 end
+				end
+				optionsList.CanvasSize = UDim2.fromOffset(0, math.max(0, visible * 28 - 2))
+			end
+
+			for index, choice in ipairs(choices) do
+				local option = Instance.new("TextButton")
+				option.AutoButtonColor = false
+				option.Text = choice
+				option.Font = Enum.Font.GothamMedium
+				option.TextSize = 11
+				option.TextXAlignment = Enum.TextXAlignment.Left
+				option.BorderSizePixel = 0
+				option.Size = UDim2.new(1, 0, 0, 26)
+				option.LayoutOrder = index
+				option.ZIndex = zIndex + 2
+				option.Parent = optionsList
+				corner(option, 3)
+				padding(option, 10, 0, 0, 0)
+				local function render()
+					local selected = selectedValues[choice] == true
+					option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+					option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+					option.BackgroundTransparency = selected and 0.1 or 0.35
+				end
+				render()
+				option.MouseButton1Click:Connect(function()
+					selectedValues[choice] = not selectedValues[choice] or nil
+					render()
+					refreshSummary()
+				end)
+				table.insert(optionButtons, option)
+			end
+			refreshSummary()
+			updateCanvas()
+			search:GetPropertyChangedSignal("Text"):Connect(function()
+				local query = string.lower(search.Text)
+				for _, option in ipairs(optionButtons) do
+					option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+				end
+				optionsList.CanvasPosition = Vector2.zero
+				updateCanvas()
+			end)
+
+			function entry.setOpen(open)
+				entry.open = open
+				panel.Size = UDim2.new(0.38, -7, 0, open and (y >= 247 and 160 or 178) or 0)
+				buttonArrow.Rotation = open and 180 or 0
+			end
+			button.MouseButton1Click:Connect(function()
+				for _, other in ipairs(shovelFilters) do
+					if other ~= entry then other.setOpen(false) end
+				end
+				entry.setOpen(not entry.open)
+			end)
+			table.insert(shovelFilters, entry)
+		end
+
+		makeShovelFilter("ShovelPlantName", "Shovel Plant Name", "Choose plants the shovel can remove.", 0, favoriteFruitOptions, selectedShovelPlants, 170)
+		makeShovelFilter("ShovelPlantRarity", "Shovel Plant Rarity", "Remove plants from these rarities.", 54, rarityOptions, selectedShovelRarities, 180)
+
+		local speedRow = Instance.new("Frame")
+		speedRow.BackgroundColor3 = palette.card
+		speedRow.BorderSizePixel = 0
+		speedRow.Position = UDim2.fromOffset(0, 108)
+		speedRow.Size = UDim2.new(1, 0, 0, 42)
+		speedRow.Parent = shovelContent
+		corner(speedRow, 4)
+		local speedTitle = label(speedRow, "Shovel Speed", 12, palette.text, true)
+		speedTitle.Position = UDim2.fromOffset(10, 3)
+		speedTitle.Size = UDim2.new(0.61, -10, 0, 18)
+		local speedDescription = label(speedRow, "Set 0 for turbo speed (no extra delay).", 10, palette.muted, false)
+		speedDescription.Position = UDim2.fromOffset(10, 20)
+		speedDescription.Size = UDim2.new(0.61, -10, 0, 16)
+		local speedValue = label(speedRow, tostring(shovelSpeed), 11, palette.text, true)
+		speedValue.Name = "ShovelSpeedValue"
+		speedValue.BackgroundColor3 = rgb(35, 27, 48)
+		speedValue.BackgroundTransparency = 0
+		speedValue.BorderSizePixel = 0
+		speedValue.Position = UDim2.new(0.62, 0, 0, 11)
+		speedValue.Size = UDim2.fromOffset(32, 20)
+		speedValue.TextXAlignment = Enum.TextXAlignment.Center
+		corner(speedValue, 4)
+		stroke(speedValue, palette.accent, 0.05, 1)
+		local speedTrack = Instance.new("Frame")
+		speedTrack.Name = "ShovelSpeedSlider"
+		speedTrack.Active = true
+		speedTrack.BackgroundColor3 = rgb(62, 63, 72)
+		speedTrack.BorderSizePixel = 0
+		speedTrack.Position = UDim2.new(0.62, 40, 0, 19)
+		speedTrack.Size = UDim2.new(0.38, -55, 0, 4)
+		speedTrack.Parent = speedRow
+		corner(speedTrack, 3)
+		local speedFill = Instance.new("Frame")
+		speedFill.BackgroundColor3 = palette.accent
+		speedFill.BorderSizePixel = 0
+		speedFill.Size = UDim2.new(shovelSpeed / 10, 0, 1, 0)
+		speedFill.Parent = speedTrack
+		corner(speedFill, 3)
+		local speedKnob = Instance.new("Frame")
+		speedKnob.BackgroundColor3 = palette.accent
+		speedKnob.BorderSizePixel = 0
+		speedKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+		speedKnob.Position = UDim2.new(shovelSpeed / 10, 0, 0.5, 0)
+		speedKnob.Size = UDim2.fromOffset(10, 10)
+		speedKnob.Parent = speedTrack
+		corner(speedKnob, 5)
+		local draggingSpeed = false
+		local function updateSpeed(screenX)
+			if speedTrack.AbsoluteSize.X <= 0 then return end
+			local alpha = math.clamp((screenX - speedTrack.AbsolutePosition.X) / speedTrack.AbsoluteSize.X, 0, 1)
+			shovelSpeed = math.floor(alpha * 10 + 0.5)
+			local snapped = shovelSpeed / 10
+			speedValue.Text = tostring(shovelSpeed)
+			speedFill.Size = UDim2.new(snapped, 0, 1, 0)
+			speedKnob.Position = UDim2.new(snapped, 0, 0.5, 0)
+			screenGui:SetAttribute("ShovelSpeed", shovelSpeed)
+		end
+		speedTrack.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				draggingSpeed = true
+				updateSpeed(input.Position.X)
+			end
+		end)
+		speedTrack.InputChanged:Connect(function(input)
+			if draggingSpeed and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+				updateSpeed(input.Position.X)
+			end
+		end)
+		speedTrack.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				draggingSpeed = false
+			end
+		end)
+
+		local startRow = Instance.new("Frame")
+		startRow.BackgroundColor3 = palette.card
+		startRow.BorderSizePixel = 0
+		startRow.Position = UDim2.fromOffset(0, 156)
+		startRow.Size = UDim2.new(1, 0, 0, 48)
+		startRow.Parent = shovelContent
+		corner(startRow, 4)
+		local startTitle = label(startRow, "Start Shovel Plant", 12, palette.text, true)
+		startTitle.Position = UDim2.fromOffset(10, 4)
+		startTitle.Size = UDim2.new(0.76, -10, 0, 18)
+		local startDescription = label(startRow, "Automatically shovels matching plants.", 10, palette.muted, false)
+		startDescription.Position = UDim2.fromOffset(10, 21)
+		startDescription.Size = UDim2.new(0.76, -10, 0, 20)
+		local startToggle = Instance.new("TextButton")
+		startToggle.Name = "StartShovelPlantToggle"
+		startToggle.AutoButtonColor = false
+		startToggle.Text = ""
+		startToggle.BackgroundColor3 = autoShovelEnabled and palette.accent or rgb(48, 46, 58)
+		startToggle.BorderSizePixel = 0
+		startToggle.Position = UDim2.new(1, -50, 0.5, -11)
+		startToggle.Size = UDim2.fromOffset(38, 22)
+		startToggle.Parent = startRow
+		corner(startToggle, 11)
+		stroke(startToggle, rgb(116, 70, 152), autoShovelEnabled and 0.15 or 0.45, 1)
+		local startKnob = Instance.new("Frame")
+		startKnob.BackgroundColor3 = rgb(239, 239, 243)
+		startKnob.BorderSizePixel = 0
+		startKnob.Position = autoShovelEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+		startKnob.Size = UDim2.fromOffset(16, 16)
+		startKnob.Parent = startToggle
+		corner(startKnob, 8)
+
+		local controllerRow = Instance.new("Frame")
+		controllerRow.Name = "ShovelFruitControllerHeader"
+		controllerRow.BackgroundColor3 = rgb(28, 20, 35)
+		controllerRow.BorderSizePixel = 0
+		controllerRow.Position = UDim2.fromOffset(0, 210)
+		controllerRow.Size = UDim2.new(1, 0, 0, 31)
+		controllerRow.Parent = shovelContent
+		corner(controllerRow, 3)
+		local controllerText = label(controllerRow, "- [ Shovel Fruit Controller ] -", 11, palette.text, true)
+		controllerText.Position = UDim2.fromOffset(10, 0)
+		controllerText.Size = UDim2.new(1, -20, 1, 0)
+
+		local function createShovelFruitController()
+			makeShovelFilter("ShovelFruitName", "Shovel Fruit Name", "Choose fruit names the shovel can remove.", 247, favoriteFruitOptions, selectedShovelFruits, 190)
+			makeShovelFilter("ShovelFruitRarity", "Shovel Fruit Rarity", "Remove fruits from these rarities.", 301, rarityOptions, selectedShovelFruitRarities, 200)
+
+			local kgRow = Instance.new("Frame")
+			kgRow.BackgroundColor3 = palette.card
+			kgRow.BorderSizePixel = 0
+			kgRow.Position = UDim2.fromOffset(0, 355)
+			kgRow.Size = UDim2.new(1, 0, 0, 48)
+			kgRow.Parent = shovelContent
+			corner(kgRow, 4)
+			local kgTitle = label(kgRow, "Input Your Kg", 12, palette.text, true)
+			kgTitle.Position = UDim2.fromOffset(10, 4)
+			kgTitle.Size = UDim2.new(0.62, -10, 0, 18)
+			local kgDescription = label(kgRow, "Set the KG number for this filter.", 10, palette.muted, false)
+			kgDescription.Position = UDim2.fromOffset(10, 21)
+			kgDescription.Size = UDim2.new(0.62, -10, 0, 20)
+			local kgInput = Instance.new("TextBox")
+			kgInput.Name = "ShovelFruitKgInput"
+			kgInput.ClearTextOnFocus = false
+			kgInput.Text = tostring(shovelFruitKg)
+			kgInput.Font = Enum.Font.GothamMedium
+			kgInput.TextSize = 11
+			kgInput.TextColor3 = palette.text
+			kgInput.TextXAlignment = Enum.TextXAlignment.Left
+			kgInput.BackgroundColor3 = rgb(31, 26, 43)
+			kgInput.BorderSizePixel = 0
+			kgInput.Position = UDim2.new(0.62, 0, 0, 8)
+			kgInput.Size = UDim2.new(0.38, -7, 0, 32)
+			kgInput.Parent = kgRow
+			corner(kgInput, 4)
+			stroke(kgInput, rgb(125, 49, 166), 0.2, 1)
+			padding(kgInput, 8, 0, 8, 0)
+
+			local directionRow = Instance.new("Frame")
+			directionRow.BackgroundColor3 = palette.card
+			directionRow.BorderSizePixel = 0
+			directionRow.Position = UDim2.fromOffset(0, 409)
+			directionRow.Size = UDim2.new(1, 0, 0, 48)
+			directionRow.Parent = shovelContent
+			corner(directionRow, 4)
+			local directionTitle = label(directionRow, "KG Direction", 12, palette.text, true)
+			directionTitle.Position = UDim2.fromOffset(10, 4)
+			directionTitle.Size = UDim2.new(0.62, -10, 0, 18)
+			local directionDescription = label(directionRow, "Up means this KG and higher. Below means lower than this KG.", 10, palette.muted, false)
+			directionDescription.Position = UDim2.fromOffset(10, 21)
+			directionDescription.Size = UDim2.new(0.62, -10, 0, 22)
+			directionDescription.TextWrapped = true
+			local directionButton = Instance.new("TextButton")
+			directionButton.Name = "ShovelFruitKgDirectionButton"
+			directionButton.AutoButtonColor = false
+			directionButton.Text = shovelFruitKgDirection
+			directionButton.Font = Enum.Font.GothamBold
+			directionButton.TextSize = 11
+			directionButton.TextColor3 = palette.text
+			directionButton.TextXAlignment = Enum.TextXAlignment.Left
+			directionButton.BackgroundColor3 = rgb(31, 26, 43)
+			directionButton.BorderSizePixel = 0
+			directionButton.Position = UDim2.new(0.62, 0, 0, 8)
+			directionButton.Size = UDim2.new(0.38, -7, 0, 32)
+			directionButton.Parent = directionRow
+			corner(directionButton, 4)
+			stroke(directionButton, rgb(72, 48, 96), 0.45, 1)
+			padding(directionButton, 10, 0, 30, 0)
+			local directionArrow = label(directionButton, "v", 13, rgb(210, 210, 216), true)
+			directionArrow.Position = UDim2.new(1, -30, 0, 0)
+			directionArrow.Size = UDim2.fromOffset(20, 32)
+			directionArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+			local directionPanel = Instance.new("Frame")
+			directionPanel.Name = "ShovelFruitKgDirectionDropdown"
+			directionPanel.BackgroundColor3 = rgb(18, 18, 25)
+			directionPanel.BorderSizePixel = 0
+			directionPanel.ClipsDescendants = true
+			directionPanel.Position = UDim2.new(0.62, 0, 0, 453)
+			directionPanel.Size = UDim2.new(0.38, -7, 0, 0)
+			directionPanel.ZIndex = 210
+			directionPanel.Parent = shovelContent
+			corner(directionPanel, 4)
+			stroke(directionPanel, rgb(91, 39, 124), 0.1, 1)
+			local directionLayout = Instance.new("UIListLayout")
+			directionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			directionLayout.Padding = UDim.new(0, 2)
+			directionLayout.Parent = directionPanel
+			local directionOpen = false
+			for index, directionName in ipairs({"Up", "Below"}) do
+				local option = Instance.new("TextButton")
+				option.AutoButtonColor = false
+				option.Text = directionName
+				option.Font = Enum.Font.GothamMedium
+				option.TextSize = 11
+				option.TextColor3 = palette.text
+				option.TextXAlignment = Enum.TextXAlignment.Left
+				option.BackgroundColor3 = rgb(18, 18, 25)
+				option.BorderSizePixel = 0
+				option.Size = UDim2.new(1, 0, 0, 28)
+				option.LayoutOrder = index
+				option.ZIndex = 211
+				option.Parent = directionPanel
+				padding(option, 10, 0, 0, 0)
+				option.MouseButton1Click:Connect(function()
+					shovelFruitKgDirection = directionName
+					directionButton.Text = directionName
+					directionOpen = false
+					directionPanel.Size = UDim2.new(0.38, -7, 0, 0)
+					directionArrow.Rotation = 0
+					screenGui:SetAttribute("ShovelFruitKgDirection", directionName)
+				end)
+			end
+			directionButton.MouseButton1Click:Connect(function()
+				for _, filter in ipairs(shovelFilters) do filter.setOpen(false) end
+				directionOpen = not directionOpen
+				directionPanel.Size = UDim2.new(0.38, -7, 0, directionOpen and 58 or 0)
+				directionArrow.Rotation = directionOpen and 180 or 0
+			end)
+
+			local fruitStartRow = Instance.new("Frame")
+			fruitStartRow.BackgroundColor3 = palette.card
+			fruitStartRow.BorderSizePixel = 0
+			fruitStartRow.Position = UDim2.fromOffset(0, 463)
+			fruitStartRow.Size = UDim2.new(1, 0, 0, 48)
+			fruitStartRow.Parent = shovelContent
+			corner(fruitStartRow, 4)
+			local fruitStartTitle = label(fruitStartRow, "Start Shovel Fruit", 12, palette.text, true)
+			fruitStartTitle.Position = UDim2.fromOffset(10, 4)
+			fruitStartTitle.Size = UDim2.new(0.76, -10, 0, 18)
+			local fruitStartDescription = label(fruitStartRow, "Automatically shovels matching fruits.", 10, palette.muted, false)
+			fruitStartDescription.Position = UDim2.fromOffset(10, 21)
+			fruitStartDescription.Size = UDim2.new(0.76, -10, 0, 20)
+			local fruitStartToggle = Instance.new("TextButton")
+			fruitStartToggle.Name = "StartShovelFruitToggle"
+			fruitStartToggle.AutoButtonColor = false
+			fruitStartToggle.Text = ""
+			fruitStartToggle.BackgroundColor3 = autoShovelFruitEnabled and palette.accent or rgb(48, 46, 58)
+			fruitStartToggle.BorderSizePixel = 0
+			fruitStartToggle.Position = UDim2.new(1, -50, 0.5, -11)
+			fruitStartToggle.Size = UDim2.fromOffset(38, 22)
+			fruitStartToggle.Parent = fruitStartRow
+			corner(fruitStartToggle, 11)
+			stroke(fruitStartToggle, rgb(116, 70, 152), autoShovelFruitEnabled and 0.15 or 0.45, 1)
+			local fruitStartKnob = Instance.new("Frame")
+			fruitStartKnob.BackgroundColor3 = rgb(239, 239, 243)
+			fruitStartKnob.BorderSizePixel = 0
+			fruitStartKnob.Position = autoShovelFruitEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+			fruitStartKnob.Size = UDim2.fromOffset(16, 16)
+			fruitStartKnob.Parent = fruitStartToggle
+			corner(fruitStartKnob, 8)
+
+			local function commitFruitKg()
+				local normalizedText = string.gsub(kgInput.Text, ",", ".")
+				shovelFruitKg = math.max(0, tonumber(normalizedText) or 0)
+				kgInput.Text = tostring(shovelFruitKg)
+				screenGui:SetAttribute("ShovelFruitKg", shovelFruitKg)
+			end
+			kgInput.FocusLost:Connect(commitFruitKg)
+			fruitStartToggle.MouseButton1Click:Connect(function()
+				commitFruitKg()
+				autoShovelFruitEnabled = not autoShovelFruitEnabled
+				autoShovelFruitRunId += 1
+				if autoShovelFruitEnabled then
+					autoShovelEnabled = false
+					autoShovelRunId += 1
+					screenGui:SetAttribute("AutoShovelEnabled", false)
+					startToggle.BackgroundColor3 = rgb(48, 46, 58)
+					startKnob.Position = UDim2.fromOffset(3, 3)
+					screenGui:SetAttribute("AutoShovelFruitStatus", "Checking fruits")
+					runAutoShovelFruit(autoShovelFruitRunId)
+				else
+					screenGui:SetAttribute("AutoShovelFruitStatus", "Stopped")
+				end
+				screenGui:SetAttribute("AutoShovelFruitEnabled", autoShovelFruitEnabled)
+				TweenService:Create(fruitStartToggle, TweenInfo.new(0.18), {
+					BackgroundColor3 = autoShovelFruitEnabled and palette.accent or rgb(48, 46, 58),
+				}):Play()
+				TweenService:Create(fruitStartKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Position = autoShovelFruitEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+				}):Play()
+			end)
+
+			screenGui:SetAttribute("ShovelFruitKg", shovelFruitKg)
+			screenGui:SetAttribute("ShovelFruitKgDirection", shovelFruitKgDirection)
+			screenGui:SetAttribute("AutoShovelFruitEnabled", autoShovelFruitEnabled)
+		end
+		createShovelFruitController()
+
+		local categoryOpen = false
+		local baseHeight = 511
+		startToggle.MouseButton1Click:Connect(function()
+			autoShovelEnabled = not autoShovelEnabled
+			autoShovelRunId += 1
+			if autoShovelEnabled then
+				autoShovelFruitEnabled = false
+				autoShovelFruitRunId += 1
+				screenGui:SetAttribute("AutoShovelFruitEnabled", false)
+				local fruitToggle = screenGui:FindFirstChild("StartShovelFruitToggle", true)
+				if fruitToggle then
+					fruitToggle.BackgroundColor3 = rgb(48, 46, 58)
+					local knob = fruitToggle:FindFirstChildWhichIsA("Frame")
+					if knob then knob.Position = UDim2.fromOffset(3, 3) end
+				end
+				screenGui:SetAttribute("AutoShovelStatus", "Checking plants")
+				runAutoShovel(autoShovelRunId)
+			else
+				screenGui:SetAttribute("AutoShovelStatus", "Stopped")
+			end
+			screenGui:SetAttribute("AutoShovelEnabled", autoShovelEnabled)
+			TweenService:Create(startToggle, TweenInfo.new(0.18), {
+				BackgroundColor3 = autoShovelEnabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(startKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = autoShovelEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+		end)
+		shovelHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then
+				for _, filter in ipairs(shovelFilters) do filter.setOpen(false) end
+			end
+			TweenService:Create(shovelContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and baseHeight or 0),
+			}):Play()
+			TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("ShovelSpeed", shovelSpeed)
+		screenGui:SetAttribute("AutoShovelEnabled", autoShovelEnabled)
+	end
+	createAutoShovelSection()
+	end
 
 	selectButton.MouseButton1Click:Connect(function()
 		if dropdownOpen then
