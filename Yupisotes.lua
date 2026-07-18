@@ -24,9 +24,20 @@ if coreGui ~= playerGui and not table.find(cleanupRoots, coreGui) then table.ins
 end)
 for _, root in ipairs(cleanupRoots) do
 pcall(function()
-for _, name in ipairs({"YupisotesUI", "WisHubGardenUI", "MaruHubPremiumCleanSidebar"}) do
-local existing = root:FindFirstChild(name)
-if existing then existing:Destroy() end
+for _, existing in ipairs(root:GetChildren()) do
+local remove = table.find({"YupisotesUI", "WisHubGardenUI", "MaruHubPremiumCleanSidebar"}, existing.Name) ~= nil
+if existing:IsA("ScreenGui") and not remove then
+remove = existing:GetAttribute("YupisotesRoot") == true
+if not remove then
+for _, descendant in ipairs(existing:GetDescendants()) do
+if (descendant:IsA("TextLabel") or descendant:IsA("TextButton")) and descendant.Text == "Yupisotes" then
+remove = true
+break
+end
+end
+end
+end
+if remove then existing:Destroy() end
 end
 end)
 end
@@ -88,6 +99,7 @@ return t
 end
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "YupisotesUI"
+screenGui:SetAttribute("YupisotesRoot", true)
 screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
