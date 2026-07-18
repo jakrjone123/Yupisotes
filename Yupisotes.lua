@@ -290,16 +290,16 @@ menuLayout.SortOrder = Enum.SortOrder.LayoutOrder
 menuLayout.Padding = UDim.new(0, 4)
 menuLayout.Parent = menu
 local tabs = {
-{"Info", "i", true},
-{"Farm", ">", false},
-{"Shop", "#", false},
-{"Pet", "*", false},
-{"Misc", "+", false},
-{"Visual", "o", false},
-{"Config", "@", false},
+{"Info", true},
+{"Farm", false},
+{"Shop", false},
+{"Pet", false},
+{"Misc", false},
+{"Visual", false},
+{"Config", false},
 }
 local tabRefs = {}
-local function makeTab(index, name, icon, active)
+local function makeTab(index, name, active)
 local tab = Instance.new("TextButton")
 tab.Name = name .. "Tab"
 tab.AutoButtonColor = false
@@ -319,10 +319,74 @@ bar.Size = UDim2.fromOffset(5, 18)
 bar.Visible = active
 bar.Parent = tab
 corner(bar, 3)
-local iconLabel = label(tab, icon, 15, active and rgb(221, 154, 255) or rgb(110, 111, 119), true)
-iconLabel.Position = UDim2.fromOffset(14, 0)
-iconLabel.Size = UDim2.fromOffset(18, 30)
-iconLabel.TextXAlignment = Enum.TextXAlignment.Center
+local iconColor = active and rgb(221, 154, 255) or rgb(110, 111, 119)
+local iconHolder = Instance.new("Frame")
+iconHolder.Name = name .. "Icon"
+iconHolder.BackgroundTransparency = 1
+iconHolder.Position = UDim2.fromOffset(14, 0)
+iconHolder.Size = UDim2.fromOffset(18, 30)
+iconHolder.Parent = tab
+local iconRoot = Instance.new("Frame")
+iconRoot.Name = "Drawing"
+iconRoot.BackgroundTransparency = 1
+iconRoot.Position = UDim2.fromOffset(1, 7)
+iconRoot.Size = UDim2.fromOffset(16, 16)
+iconRoot.Parent = iconHolder
+local function iconPart(x, y, width, height, radius, rotation)
+local part = Instance.new("Frame")
+part.BackgroundColor3 = iconColor
+part.BorderSizePixel = 0
+part.Position = UDim2.fromOffset(x, y)
+part.Size = UDim2.fromOffset(width, height)
+part.Rotation = rotation or 0
+part.Parent = iconRoot
+if radius then corner(part, radius) end
+return part
+end
+local function iconOutline(x, y, width, height, radius)
+local outline = iconPart(x, y, width, height, radius)
+outline.BackgroundTransparency = 1
+stroke(outline, iconColor, 0, 1.2)
+return outline
+end
+if name == "Info" then
+iconOutline(2, 1, 12, 14, 7)
+iconPart(7, 4, 2, 2, 1)
+iconPart(7, 7, 2, 6, 1)
+elseif name == "Farm" then
+iconPart(7, 6, 2, 9, 1)
+iconPart(2, 4, 7, 4, 3, 32)
+iconPart(8, 2, 6, 4, 3, -32)
+iconPart(4, 14, 8, 2, 1)
+elseif name == "Shop" then
+iconPart(2, 6, 12, 9, 2)
+local handle = iconOutline(5, 2, 6, 7, 4)
+handle.ZIndex = 2
+iconPart(5, 9, 6, 1, 1)
+elseif name == "Pet" then
+iconPart(4, 8, 8, 7, 4)
+iconPart(1, 5, 4, 4, 2)
+iconPart(4, 2, 4, 4, 2)
+iconPart(8, 2, 4, 4, 2)
+iconPart(11, 5, 4, 4, 2)
+elseif name == "Misc" then
+iconOutline(4, 1, 8, 9, 5)
+iconPart(6, 9, 4, 4, 1)
+iconPart(5, 13, 6, 2, 1)
+iconPart(1, 5, 2, 2, 1)
+iconPart(13, 5, 2, 2, 1)
+elseif name == "Visual" then
+iconOutline(1, 4, 14, 9, 6)
+iconPart(6, 6, 4, 4, 2)
+elseif name == "Config" then
+iconOutline(4, 4, 8, 8, 4)
+iconPart(7, 0, 2, 5, 1)
+iconPart(7, 11, 2, 5, 1)
+iconPart(0, 7, 5, 2, 1)
+iconPart(11, 7, 5, 2, 1)
+iconPart(2, 2, 3, 3, 1, 45)
+iconPart(11, 11, 3, 3, 1, 45)
+end
 local tabLabel = label(tab, name, 13, active and palette.text or rgb(188, 188, 195), true)
 tabLabel.Position = UDim2.fromOffset(40, 0)
 tabLabel.Size = UDim2.new(1, -44, 1, 0)
@@ -340,12 +404,12 @@ tab:SetAttribute("Active", active)
 tabRefs[name] = {
 button = tab,
 bar = bar,
-icon = iconLabel,
+icon = iconHolder,
 text = tabLabel,
 }
 end
 for index, item in ipairs(tabs) do
-makeTab(index, item[1], item[2], item[3])
+makeTab(index, item[1], item[2])
 end
 local content = Instance.new("Frame")
 content.BackgroundTransparency = 1
@@ -1083,7 +1147,14 @@ ref.button:SetAttribute("Active", active)
 ref.button.BackgroundColor3 = active and rgb(50, 20, 73) or palette.side
 ref.button.BackgroundTransparency = active and 0 or 1
 ref.bar.Visible = active
-ref.icon.TextColor3 = active and rgb(221, 154, 255) or rgb(110, 111, 119)
+local iconColor = active and rgb(221, 154, 255) or rgb(110, 111, 119)
+for _, iconObject in ipairs(ref.icon:GetDescendants()) do
+if iconObject:IsA("Frame") then
+iconObject.BackgroundColor3 = iconColor
+elseif iconObject:IsA("UIStroke") then
+iconObject.Color = iconColor
+end
+end
 ref.text.TextColor3 = active and palette.text or rgb(188, 188, 195)
 end
 end
