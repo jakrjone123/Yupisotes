@@ -541,6 +541,7 @@ runtime.YupisotesShopState = {
 	auctionRefreshId = 0,
 }
 runtime.YupisotesPetState = {
+	categoryOpen = true,
 	selectedNames = {},
 	selectedRarities = {},
 	enabled = false,
@@ -8418,6 +8419,7 @@ runtime.YupisotesShowPet = function()
 	headerArrow.Position = UDim2.new(1, -28, 0, 0)
 	headerArrow.Size = UDim2.fromOffset(20, 31)
 	headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+	headerArrow.Rotation = state.categoryOpen and 180 or 0
 	local headerAccent = Instance.new("Frame")
 	headerAccent.BackgroundColor3 = palette.accent
 	headerAccent.BorderSizePixel = 0
@@ -8430,7 +8432,8 @@ runtime.YupisotesShowPet = function()
 	petContent.BackgroundTransparency = 1
 	petContent.BorderSizePixel = 0
 	petContent.ClipsDescendants = true
-	petContent.Size = UDim2.new(1, 0, 0, 166)
+	petContent.Size = UDim2.new(1, 0, 0, state.categoryOpen and 166 or 0)
+	petContent.Visible = state.categoryOpen
 	petContent.LayoutOrder = 1
 	petContent.Parent = list
 
@@ -8715,15 +8718,25 @@ runtime.YupisotesShowPet = function()
 	end)
 	renderToggle()
 
-	local categoryOpen = true
-	headerArrow.Rotation = 180
 	header.MouseButton1Click:Connect(function()
-		categoryOpen = not categoryOpen
-		if not categoryOpen then closeFilters(nil) end
-		TweenService:Create(petContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(1, 0, 0, categoryOpen and 166 or 0),
-		}):Play()
-		TweenService:Create(headerArrow, TweenInfo.new(0.18), {Rotation = categoryOpen and 180 or 0}):Play()
+		state.categoryOpen = not state.categoryOpen
+		if state.categoryOpen then
+			petContent.Visible = true
+			petContent.Size = UDim2.new(1, 0, 0, 0)
+			TweenService:Create(petContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, 166),
+			}):Play()
+		else
+			closeFilters(nil)
+			local collapseTween = TweenService:Create(petContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, 0),
+			})
+			collapseTween:Play()
+			collapseTween.Completed:Once(function()
+				if not state.categoryOpen and petContent.Parent then petContent.Visible = false end
+			end)
+		end
+		TweenService:Create(headerArrow, TweenInfo.new(0.18), {Rotation = state.categoryOpen and 180 or 0}):Play()
 	end)
 	screenGui:SetAttribute("StartBuyPetEnabled", state.enabled)
 	screenGui:SetAttribute("AutoBuyWildPetStatus", state.enabled and "Waiting for matching pet" or "Stopped")
