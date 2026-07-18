@@ -540,11 +540,9 @@ runtime.YupisotesShopState = {
 	auctionBought = {},
 	auctionRefreshId = 0,
 }
-if runtime.YupisotesWildPetCategoryOpen == nil then
-	runtime.YupisotesWildPetCategoryOpen = true
-end
+runtime.YupisotesWildPetCategoryOpen = false
 runtime.YupisotesPetState = {
-	categoryOpen = true,
+	categoryOpen = false,
 	selectedNames = {},
 	selectedRarities = {},
 	enabled = false,
@@ -856,6 +854,9 @@ if type(isfile) == "function" and type(readfile) == "function" and isfile(runtim
 	local loaded = runtime.YupisotesLoadConfig(autoName)
 	runtime.YupisotesConfigState.autoLoad = loaded == true
 end
+runtime.YupisotesWildPetCategoryOpen = false
+runtime.YupisotesPetState.categoryOpen = false
+runtime.YupisotesVisualState.fruitValueCategoryOpen = false
 local dropdownOpen = false
 local sectionConnection
 local function clearList()
