@@ -758,6 +758,9 @@ runtime.YupisotesExportConfig = function()
 		pet = runtime.YupisotesConfigClone(runtime.YupisotesPetState),
 		misc = runtime.YupisotesConfigClone(runtime.YupisotesMiscState),
 		visual = runtime.YupisotesConfigClone(runtime.YupisotesVisualState),
+		visualEnabled = {
+			selectedFruitValueEnabled = runtime.YupisotesVisualState.selectedFruitValueEnabled == true,
+		},
 	}
 end
 runtime.YupisotesImportConfig = function(data)
@@ -811,6 +814,9 @@ runtime.YupisotesImportConfig = function(data)
 	runtime.YupisotesMergeConfig(runtime.YupisotesPetState, data.pet)
 	runtime.YupisotesMergeConfig(runtime.YupisotesMiscState, data.misc)
 	runtime.YupisotesMergeConfig(runtime.YupisotesVisualState, data.visual)
+	if type(data.visualEnabled) == "table" then
+		runtime.YupisotesVisualState.selectedFruitValueEnabled = data.visualEnabled.selectedFruitValueEnabled == true
+	end
 	return true
 end
 runtime.YupisotesListConfigs = function()
