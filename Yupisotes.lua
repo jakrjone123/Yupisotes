@@ -735,7 +735,7 @@ runtime.YupisotesEnsureConfigFolders = function()
 end
 runtime.YupisotesExportConfig = function()
 	return {
-		version = 2,
+		version = 3,
 		farm = {
 			selectedPlant = selectedPlant, selectedPlantRarities = runtime.YupisotesConfigClone(selectedPlantRarities), selectedMethod = selectedMethod, plantSpeed = plantSpeed,
 			selectedHarvestPlant = selectedHarvestPlant, harvestDelay = harvestDelay, advancedHarvestEnabled = advancedHarvestEnabled,
@@ -760,6 +760,64 @@ runtime.YupisotesExportConfig = function()
 		visual = runtime.YupisotesConfigClone(runtime.YupisotesVisualState),
 		visualEnabled = {
 			selectedFruitValueEnabled = runtime.YupisotesVisualState.selectedFruitValueEnabled == true,
+		},
+		selections = {
+			shop = {
+				selectedSeeds = runtime.YupisotesConfigClone(runtime.YupisotesShopState.selectedSeeds),
+				selectedRarities = runtime.YupisotesConfigClone(runtime.YupisotesShopState.selectedRarities),
+				buyAmount = runtime.YupisotesShopState.buyAmount,
+				selectedGear = runtime.YupisotesConfigClone(runtime.YupisotesShopState.selectedGear),
+				gearBuyAmount = runtime.YupisotesShopState.gearBuyAmount,
+				selectedProps = runtime.YupisotesConfigClone(runtime.YupisotesShopState.selectedProps),
+				propsBuyAmount = runtime.YupisotesShopState.propsBuyAmount,
+				auctionSelections = runtime.YupisotesConfigClone(runtime.YupisotesShopState.auctionSelections),
+				auctionPriceMode = runtime.YupisotesShopState.auctionPriceMode,
+				auctionPriceLimit = runtime.YupisotesShopState.auctionPriceLimit,
+				auctionBuyLotCount = runtime.YupisotesShopState.auctionBuyLotCount,
+			},
+			pet = {
+				selectedNames = runtime.YupisotesConfigClone(runtime.YupisotesPetState.selectedNames),
+				selectedRarities = runtime.YupisotesConfigClone(runtime.YupisotesPetState.selectedRarities),
+			},
+			misc = {
+				owner = runtime.YupisotesMiscState.owner,
+				sprinkler = runtime.YupisotesMiscState.sprinkler,
+				wateringCan = runtime.YupisotesMiscState.wateringCan,
+				plantNames = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.plantNames),
+				plantRarities = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.plantRarities),
+				placeMode = runtime.YupisotesMiscState.placeMode,
+				actionDelay = runtime.YupisotesMiscState.actionDelay,
+				wateringLimit = runtime.YupisotesMiscState.wateringLimit,
+				giftUsername = runtime.YupisotesMiscState.giftUsername,
+				giftType = runtime.YupisotesMiscState.giftType,
+				giftRarities = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.giftRarities),
+				giftItems = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.giftItems),
+				giftAmount = runtime.YupisotesMiscState.giftAmount,
+				giftDelay = runtime.YupisotesMiscState.giftDelay,
+				mailReceiver = runtime.YupisotesMiscState.mailReceiver,
+				mailCategory = runtime.YupisotesMiscState.mailCategory,
+				mailItems = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.mailItems),
+				mailRarities = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.mailRarities),
+				mailAmount = runtime.YupisotesMiscState.mailAmount,
+				mailNote = runtime.YupisotesMiscState.mailNote,
+				mailDelay = runtime.YupisotesMiscState.mailDelay,
+				hidePlantScope = runtime.YupisotesMiscState.hidePlantScope,
+				antiFlingMethod = runtime.YupisotesMiscState.antiFlingMethod,
+				webhookTagType = runtime.YupisotesMiscState.webhookTagType,
+				webhookTagId = runtime.YupisotesMiscState.webhookTagId,
+				webhookUrl = runtime.YupisotesMiscState.webhookUrl,
+				webhookItems = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.webhookItems),
+				utilityTagType = runtime.YupisotesMiscState.utilityTagType,
+				utilityTagId = runtime.YupisotesMiscState.utilityTagId,
+				utilityWebhookUrl = runtime.YupisotesMiscState.utilityWebhookUrl,
+				utilityItemTypes = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.utilityItemTypes),
+				utilityItems = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.utilityItems),
+				utilityRarities = runtime.YupisotesConfigClone(runtime.YupisotesMiscState.utilityRarities),
+			},
+			visual = {
+				selectedValueSeeds = runtime.YupisotesConfigClone(runtime.YupisotesVisualState.selectedValueSeeds),
+				highestFruitValueOnly = runtime.YupisotesVisualState.highestFruitValueOnly,
+			},
 		},
 		toggles = {
 			farm = {
@@ -843,6 +901,59 @@ runtime.YupisotesImportConfig = function(data)
 	runtime.YupisotesMergeConfig(runtime.YupisotesPetState, data.pet)
 	runtime.YupisotesMergeConfig(runtime.YupisotesMiscState, data.misc)
 	runtime.YupisotesMergeConfig(runtime.YupisotesVisualState, data.visual)
+	local selections = type(data.selections) == "table" and data.selections or {}
+	local shopSelections = type(selections.shop) == "table" and selections.shop or {}
+	if type(shopSelections.selectedSeeds) == "table" then runtime.YupisotesShopState.selectedSeeds = shopSelections.selectedSeeds end
+	if type(shopSelections.selectedRarities) == "table" then runtime.YupisotesShopState.selectedRarities = shopSelections.selectedRarities end
+	runtime.YupisotesShopState.buyAmount = tonumber(shopSelections.buyAmount) or runtime.YupisotesShopState.buyAmount
+	if type(shopSelections.selectedGear) == "table" then runtime.YupisotesShopState.selectedGear = shopSelections.selectedGear end
+	runtime.YupisotesShopState.gearBuyAmount = tonumber(shopSelections.gearBuyAmount) or runtime.YupisotesShopState.gearBuyAmount
+	if type(shopSelections.selectedProps) == "table" then runtime.YupisotesShopState.selectedProps = shopSelections.selectedProps end
+	runtime.YupisotesShopState.propsBuyAmount = tonumber(shopSelections.propsBuyAmount) or runtime.YupisotesShopState.propsBuyAmount
+	if type(shopSelections.auctionSelections) == "table" then runtime.YupisotesShopState.auctionSelections = shopSelections.auctionSelections end
+	runtime.YupisotesShopState.auctionPriceMode = shopSelections.auctionPriceMode or runtime.YupisotesShopState.auctionPriceMode
+	runtime.YupisotesShopState.auctionPriceLimit = tonumber(shopSelections.auctionPriceLimit) or runtime.YupisotesShopState.auctionPriceLimit
+	runtime.YupisotesShopState.auctionBuyLotCount = tonumber(shopSelections.auctionBuyLotCount) or runtime.YupisotesShopState.auctionBuyLotCount
+	local petSelections = type(selections.pet) == "table" and selections.pet or {}
+	if type(petSelections.selectedNames) == "table" then runtime.YupisotesPetState.selectedNames = petSelections.selectedNames end
+	if type(petSelections.selectedRarities) == "table" then runtime.YupisotesPetState.selectedRarities = petSelections.selectedRarities end
+	local miscSelections = type(selections.misc) == "table" and selections.misc or {}
+	runtime.YupisotesMiscState.owner = miscSelections.owner or runtime.YupisotesMiscState.owner
+	runtime.YupisotesMiscState.sprinkler = miscSelections.sprinkler or runtime.YupisotesMiscState.sprinkler
+	runtime.YupisotesMiscState.wateringCan = miscSelections.wateringCan or runtime.YupisotesMiscState.wateringCan
+	if type(miscSelections.plantNames) == "table" then runtime.YupisotesMiscState.plantNames = miscSelections.plantNames end
+	if type(miscSelections.plantRarities) == "table" then runtime.YupisotesMiscState.plantRarities = miscSelections.plantRarities end
+	runtime.YupisotesMiscState.placeMode = miscSelections.placeMode or runtime.YupisotesMiscState.placeMode
+	runtime.YupisotesMiscState.actionDelay = tonumber(miscSelections.actionDelay) or runtime.YupisotesMiscState.actionDelay
+	runtime.YupisotesMiscState.wateringLimit = tonumber(miscSelections.wateringLimit) or runtime.YupisotesMiscState.wateringLimit
+	runtime.YupisotesMiscState.giftUsername = miscSelections.giftUsername or runtime.YupisotesMiscState.giftUsername
+	runtime.YupisotesMiscState.giftType = miscSelections.giftType or runtime.YupisotesMiscState.giftType
+	if type(miscSelections.giftRarities) == "table" then runtime.YupisotesMiscState.giftRarities = miscSelections.giftRarities end
+	if type(miscSelections.giftItems) == "table" then runtime.YupisotesMiscState.giftItems = miscSelections.giftItems end
+	runtime.YupisotesMiscState.giftAmount = tonumber(miscSelections.giftAmount) or runtime.YupisotesMiscState.giftAmount
+	runtime.YupisotesMiscState.giftDelay = tonumber(miscSelections.giftDelay) or runtime.YupisotesMiscState.giftDelay
+	runtime.YupisotesMiscState.mailReceiver = miscSelections.mailReceiver or runtime.YupisotesMiscState.mailReceiver
+	runtime.YupisotesMiscState.mailCategory = miscSelections.mailCategory or runtime.YupisotesMiscState.mailCategory
+	if type(miscSelections.mailItems) == "table" then runtime.YupisotesMiscState.mailItems = miscSelections.mailItems end
+	if type(miscSelections.mailRarities) == "table" then runtime.YupisotesMiscState.mailRarities = miscSelections.mailRarities end
+	runtime.YupisotesMiscState.mailAmount = tonumber(miscSelections.mailAmount) or runtime.YupisotesMiscState.mailAmount
+	runtime.YupisotesMiscState.mailNote = miscSelections.mailNote or runtime.YupisotesMiscState.mailNote
+	runtime.YupisotesMiscState.mailDelay = tonumber(miscSelections.mailDelay) or runtime.YupisotesMiscState.mailDelay
+	runtime.YupisotesMiscState.hidePlantScope = miscSelections.hidePlantScope or runtime.YupisotesMiscState.hidePlantScope
+	runtime.YupisotesMiscState.antiFlingMethod = miscSelections.antiFlingMethod or runtime.YupisotesMiscState.antiFlingMethod
+	runtime.YupisotesMiscState.webhookTagType = miscSelections.webhookTagType or runtime.YupisotesMiscState.webhookTagType
+	runtime.YupisotesMiscState.webhookTagId = miscSelections.webhookTagId or runtime.YupisotesMiscState.webhookTagId
+	runtime.YupisotesMiscState.webhookUrl = miscSelections.webhookUrl or runtime.YupisotesMiscState.webhookUrl
+	if type(miscSelections.webhookItems) == "table" then runtime.YupisotesMiscState.webhookItems = miscSelections.webhookItems end
+	runtime.YupisotesMiscState.utilityTagType = miscSelections.utilityTagType or runtime.YupisotesMiscState.utilityTagType
+	runtime.YupisotesMiscState.utilityTagId = miscSelections.utilityTagId or runtime.YupisotesMiscState.utilityTagId
+	runtime.YupisotesMiscState.utilityWebhookUrl = miscSelections.utilityWebhookUrl or runtime.YupisotesMiscState.utilityWebhookUrl
+	if type(miscSelections.utilityItemTypes) == "table" then runtime.YupisotesMiscState.utilityItemTypes = miscSelections.utilityItemTypes end
+	if type(miscSelections.utilityItems) == "table" then runtime.YupisotesMiscState.utilityItems = miscSelections.utilityItems end
+	if type(miscSelections.utilityRarities) == "table" then runtime.YupisotesMiscState.utilityRarities = miscSelections.utilityRarities end
+	local visualSelections = type(selections.visual) == "table" and selections.visual or {}
+	if type(visualSelections.selectedValueSeeds) == "table" then runtime.YupisotesVisualState.selectedValueSeeds = visualSelections.selectedValueSeeds end
+	if visualSelections.highestFruitValueOnly ~= nil then runtime.YupisotesVisualState.highestFruitValueOnly = visualSelections.highestFruitValueOnly == true end
 	local toggles = type(data.toggles) == "table" and data.toggles or {}
 	local farmToggles = type(toggles.farm) == "table" and toggles.farm or {}
 	autoPlantEnabled = farmToggles.autoPlant == true
