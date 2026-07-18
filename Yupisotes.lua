@@ -735,7 +735,7 @@ runtime.YupisotesEnsureConfigFolders = function()
 end
 runtime.YupisotesExportConfig = function()
 	return {
-		version = 1,
+		version = 2,
 		farm = {
 			selectedPlant = selectedPlant, selectedPlantRarities = runtime.YupisotesConfigClone(selectedPlantRarities), selectedMethod = selectedMethod, plantSpeed = plantSpeed,
 			selectedHarvestPlant = selectedHarvestPlant, harvestDelay = harvestDelay, advancedHarvestEnabled = advancedHarvestEnabled,
@@ -760,6 +760,35 @@ runtime.YupisotesExportConfig = function()
 		visual = runtime.YupisotesConfigClone(runtime.YupisotesVisualState),
 		visualEnabled = {
 			selectedFruitValueEnabled = runtime.YupisotesVisualState.selectedFruitValueEnabled == true,
+		},
+		toggles = {
+			farm = {
+				autoPlant = autoPlantEnabled, autoHarvest = autoHarvestEnabled, autoSell = autoSellEnabled,
+				advancedSell = advancedSellEnabled, doubleOrNothing = doubleEnabled, autoFavorite = autoFavoriteEnabled,
+				autoShovel = autoShovelEnabled, autoShovelFruit = autoShovelFruitEnabled, autoTrowel = autoTrowelEnabled,
+				autoCollectSeed = autoCollectDroppedSeedEnabled, autoSellPet = autoSellPetEnabled, autoLeaveWeather = autoLeaveWeatherEnabled,
+			},
+			shop = {
+				buySeedsLimited = runtime.YupisotesShopState.limitedEnabled, buySeedsAlways = runtime.YupisotesShopState.alwaysEnabled,
+				buyGearLimited = runtime.YupisotesShopState.gearLimitedEnabled, buyGearAlways = runtime.YupisotesShopState.gearAlwaysEnabled,
+				buyPropsLimited = runtime.YupisotesShopState.propsLimitedEnabled, buyPropsAlways = runtime.YupisotesShopState.propsAlwaysEnabled,
+				auction = runtime.YupisotesShopState.auctionEnabled,
+			},
+			pet = {wildPet = runtime.YupisotesPetState.enabled, dragonEgg = runtime.YupisotesPetState.eggEnabled},
+			misc = {
+				watering = runtime.YupisotesMiscState.enabled, autoGift = runtime.YupisotesMiscState.giftEnabled,
+				autoAcceptGift = runtime.YupisotesMiscState.autoAcceptGift, mailSelected = runtime.YupisotesMiscState.mailSelectedEnabled,
+				mailAll = runtime.YupisotesMiscState.mailAllEnabled, mailClaim = runtime.YupisotesMiscState.mailClaimEnabled,
+				autoReconnect = runtime.YupisotesMiscState.autoReconnect, boostFps = runtime.YupisotesMiscState.boostFps,
+				hidePlants = runtime.YupisotesMiscState.hidePlants, protection = runtime.YupisotesMiscState.protectionEnabled,
+				webhookStock = runtime.YupisotesMiscState.webhookStockEnabled, webhookUtility = runtime.YupisotesMiscState.utilityWebhookEnabled,
+			},
+			visual = {
+				inventoryFruit = runtime.YupisotesVisualState.inventoryFruitEnabled,
+				gardenFruit = runtime.YupisotesVisualState.gardenFruitEnabled,
+				gardenValue = runtime.YupisotesVisualState.gardenValueEnabled,
+				selectedFruitValue = runtime.YupisotesVisualState.selectedFruitValueEnabled,
+			},
 		},
 	}
 end
@@ -814,6 +843,49 @@ runtime.YupisotesImportConfig = function(data)
 	runtime.YupisotesMergeConfig(runtime.YupisotesPetState, data.pet)
 	runtime.YupisotesMergeConfig(runtime.YupisotesMiscState, data.misc)
 	runtime.YupisotesMergeConfig(runtime.YupisotesVisualState, data.visual)
+	local toggles = type(data.toggles) == "table" and data.toggles or {}
+	local farmToggles = type(toggles.farm) == "table" and toggles.farm or {}
+	autoPlantEnabled = farmToggles.autoPlant == true
+	autoHarvestEnabled = farmToggles.autoHarvest == true
+	autoSellEnabled = farmToggles.autoSell == true
+	advancedSellEnabled = farmToggles.advancedSell == true
+	doubleEnabled = farmToggles.doubleOrNothing == true
+	autoFavoriteEnabled = farmToggles.autoFavorite == true
+	autoShovelEnabled = farmToggles.autoShovel == true
+	autoShovelFruitEnabled = farmToggles.autoShovelFruit == true
+	autoTrowelEnabled = farmToggles.autoTrowel == true
+	autoCollectDroppedSeedEnabled = farmToggles.autoCollectSeed == true
+	autoSellPetEnabled = farmToggles.autoSellPet == true
+	autoLeaveWeatherEnabled = farmToggles.autoLeaveWeather == true
+	local shopToggles = type(toggles.shop) == "table" and toggles.shop or {}
+	runtime.YupisotesShopState.limitedEnabled = shopToggles.buySeedsLimited == true
+	runtime.YupisotesShopState.alwaysEnabled = shopToggles.buySeedsAlways == true
+	runtime.YupisotesShopState.gearLimitedEnabled = shopToggles.buyGearLimited == true
+	runtime.YupisotesShopState.gearAlwaysEnabled = shopToggles.buyGearAlways == true
+	runtime.YupisotesShopState.propsLimitedEnabled = shopToggles.buyPropsLimited == true
+	runtime.YupisotesShopState.propsAlwaysEnabled = shopToggles.buyPropsAlways == true
+	runtime.YupisotesShopState.auctionEnabled = shopToggles.auction == true
+	local petToggles = type(toggles.pet) == "table" and toggles.pet or {}
+	runtime.YupisotesPetState.enabled = petToggles.wildPet == true
+	runtime.YupisotesPetState.eggEnabled = petToggles.dragonEgg == true
+	local miscToggles = type(toggles.misc) == "table" and toggles.misc or {}
+	runtime.YupisotesMiscState.enabled = miscToggles.watering == true
+	runtime.YupisotesMiscState.giftEnabled = miscToggles.autoGift == true
+	runtime.YupisotesMiscState.autoAcceptGift = miscToggles.autoAcceptGift == true
+	runtime.YupisotesMiscState.mailSelectedEnabled = miscToggles.mailSelected == true
+	runtime.YupisotesMiscState.mailAllEnabled = miscToggles.mailAll == true
+	runtime.YupisotesMiscState.mailClaimEnabled = miscToggles.mailClaim == true
+	runtime.YupisotesMiscState.autoReconnect = miscToggles.autoReconnect == true
+	runtime.YupisotesMiscState.boostFps = miscToggles.boostFps == true
+	runtime.YupisotesMiscState.hidePlants = miscToggles.hidePlants == true
+	runtime.YupisotesMiscState.protectionEnabled = miscToggles.protection == true
+	runtime.YupisotesMiscState.webhookStockEnabled = miscToggles.webhookStock == true
+	runtime.YupisotesMiscState.utilityWebhookEnabled = miscToggles.webhookUtility == true
+	local visualToggles = type(toggles.visual) == "table" and toggles.visual or {}
+	runtime.YupisotesVisualState.inventoryFruitEnabled = visualToggles.inventoryFruit == true
+	runtime.YupisotesVisualState.gardenFruitEnabled = visualToggles.gardenFruit == true
+	runtime.YupisotesVisualState.gardenValueEnabled = visualToggles.gardenValue == true
+	runtime.YupisotesVisualState.selectedFruitValueEnabled = visualToggles.selectedFruitValue == true
 	if type(data.visualEnabled) == "table" then
 		runtime.YupisotesVisualState.selectedFruitValueEnabled = data.visualEnabled.selectedFruitValueEnabled == true
 	end
@@ -2795,6 +2867,12 @@ Position = autoPlantEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3
 }):Play()
 end)
 syncAutoPlantAttributes()
+if autoPlantEnabled then
+autoPlantRunId += 1
+autoPlantOrigin = player.Character and player.Character:GetPivot().Position or nil
+screenGui:SetAttribute("AutoPlantStatus", "Running")
+runAutoPlant(autoPlantRunId)
+end
 local harvestHeader = Instance.new("TextButton")
 harvestHeader.Name = "AutoHarvestHeader"
 harvestHeader.AutoButtonColor = false
@@ -3622,6 +3700,11 @@ Position = autoHarvestEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3,
 }):Play()
 end)
 syncAutoHarvestAttributes()
+if autoHarvestEnabled then
+autoHarvestRunId += 1
+screenGui:SetAttribute("AutoHarvestStatus", "Running")
+runAutoHarvest(autoHarvestRunId)
+end
 local sellHeader = Instance.new("TextButton")
 sellHeader.Name = "AutoSellHeader"
 sellHeader.AutoButtonColor = false
@@ -3879,6 +3962,11 @@ end)
 screenGui:SetAttribute("AutoSellEnabled", autoSellEnabled)
 screenGui:SetAttribute("SellingMethod", sellingMethod)
 screenGui:SetAttribute("SellingInput", sellingInput)
+if autoSellEnabled then
+autoSellRunId += 1
+screenGui:SetAttribute("AutoSellStatus", "Waiting for rule")
+runAutoSell(autoSellRunId)
+end
 do
 local advancedSellHeader = Instance.new("TextButton")
 advancedSellHeader.Name = "AutoSellAdvancedHeader"
@@ -4098,6 +4186,11 @@ end)
 screenGui:SetAttribute("AdvancedSellEnabled", advancedSellEnabled)
 screenGui:SetAttribute("AdvancedSellMode", advancedSellMode)
 screenGui:SetAttribute("AdvancedSellTarget", advancedSellTarget)
+if advancedSellEnabled then
+advancedSellRunId += 1
+screenGui:SetAttribute("AdvancedSellStatus", "Checking prices")
+runAdvancedSell(advancedSellRunId)
+end
 end
 do
 local doubleHeader = Instance.new("TextButton")
@@ -4327,6 +4420,11 @@ screenGui:SetAttribute("DoubleTriggerCount", doubleTriggerCount)
 screenGui:SetAttribute("DoubleUseBackpackMax", doubleUseBackpackMax)
 screenGui:SetAttribute("DoubleTargetWins", doubleTargetWins)
 screenGui:SetAttribute("DoubleOrNothingEnabled", doubleEnabled)
+if doubleEnabled then
+doubleRunId += 1
+screenGui:SetAttribute("DoubleOrNothingStatus", "Waiting for inventory")
+runDoubleOrNothing(doubleRunId)
+end
 end
 local dailyHeader = Instance.new("TextButton")
 dailyHeader.Name = "DailyDealHeader"
@@ -4974,6 +5072,11 @@ end)
 screenGui:SetAttribute("FavoriteKg", favoriteKg)
 screenGui:SetAttribute("FavoriteKgDirection", favoriteKgDirection)
 screenGui:SetAttribute("AutoFavoriteEnabled", autoFavoriteEnabled)
+if autoFavoriteEnabled then
+autoFavoriteRunId += 1
+screenGui:SetAttribute("AutoFavoriteStatus", "Checking inventory")
+runAutoFavorite(autoFavoriteRunId)
+end
 end
 createAutoFavoriteSection()
 end
@@ -5455,6 +5558,11 @@ end)
 screenGui:SetAttribute("ShovelFruitKg", shovelFruitKg)
 screenGui:SetAttribute("ShovelFruitKgDirection", shovelFruitKgDirection)
 screenGui:SetAttribute("AutoShovelFruitEnabled", autoShovelFruitEnabled)
+if autoShovelFruitEnabled then
+autoShovelFruitRunId += 1
+screenGui:SetAttribute("AutoShovelFruitStatus", "Checking fruits")
+runAutoShovelFruit(autoShovelFruitRunId)
+end
 end
 createShovelFruitController()
 local categoryOpen = false
@@ -5499,6 +5607,11 @@ Rotation = categoryOpen and 180 or 0,
 end)
 screenGui:SetAttribute("ShovelSpeed", shovelSpeed)
 screenGui:SetAttribute("AutoShovelEnabled", autoShovelEnabled)
+if autoShovelEnabled then
+autoShovelRunId += 1
+screenGui:SetAttribute("AutoShovelStatus", "Checking plants")
+runAutoShovel(autoShovelRunId)
+end
 end
 createAutoShovelSection()
 end
@@ -5892,6 +6005,11 @@ end)
 screenGui:SetAttribute("TrowelPositionMode", trowelPositionMode)
 screenGui:SetAttribute("TrowelDelay", trowelDelay)
 screenGui:SetAttribute("AutoTrowelEnabled", autoTrowelEnabled)
+if autoTrowelEnabled then
+autoTrowelRunId += 1
+screenGui:SetAttribute("AutoTrowelStatus", "Checking plants")
+runAutoTrowel(autoTrowelRunId)
+end
 end
 createAutoTrowelSection()
 end
@@ -6128,6 +6246,11 @@ end)
 screenGui:SetAttribute("CollectedSeedSelection", collectedSeedSelection)
 screenGui:SetAttribute("CollectedSeedDelay", collectedSeedDelay)
 screenGui:SetAttribute("AutoCollectDroppedSeedEnabled", autoCollectDroppedSeedEnabled)
+if autoCollectDroppedSeedEnabled then
+autoCollectDroppedSeedRunId += 1
+screenGui:SetAttribute("AutoCollectDroppedSeedStatus", "Checking nearby seeds")
+runAutoCollectDroppedSeed(autoCollectDroppedSeedRunId)
+end
 end
 createAutoCollectDroppedSeedSection()
 end
@@ -6453,6 +6576,11 @@ end)
 screenGui:SetAttribute("SellPetDelay", sellPetDelay)
 screenGui:SetAttribute("AutoSellPetEnabled", autoSellPetEnabled)
 screenGui:SetAttribute("BlacklistedPetVariants", "Big,Huge,Rainbow,Mega")
+if autoSellPetEnabled then
+autoSellPetRunId += 1
+screenGui:SetAttribute("AutoSellPetStatus", "Checking inventory")
+runAutoSellPet(autoSellPetRunId)
+end
 end
 createAutoSellPetSection()
 end
@@ -6722,7 +6850,11 @@ Rotation = categoryOpen and 180 or 0,
 }):Play()
 end)
 screenGui:SetAttribute("AutoLeaveWeatherEnabled", autoLeaveWeatherEnabled)
-screenGui:SetAttribute("AutoLeaveWeatherStatus", "Stopped")
+screenGui:SetAttribute("AutoLeaveWeatherStatus", autoLeaveWeatherEnabled and "Watching selected weather" or "Stopped")
+if autoLeaveWeatherEnabled then
+autoLeaveWeatherRunId += 1
+runAutoLeaveWeather(autoLeaveWeatherRunId)
+end
 end
 createAutoLeaveWeatherSection()
 end
@@ -7153,7 +7285,11 @@ runtime.YupisotesShowShop = function()
 	screenGui:SetAttribute("SeedsBuyAmount", state.buyAmount)
 	screenGui:SetAttribute("BuySeedsIfRestockEnabled", state.limitedEnabled)
 	screenGui:SetAttribute("AlwaysBuySeedsIfRestockEnabled", state.alwaysEnabled)
-	screenGui:SetAttribute("AutoBuySeedsStatus", "Stopped")
+	screenGui:SetAttribute("AutoBuySeedsStatus", (state.limitedEnabled or state.alwaysEnabled) and "Running" or "Stopped")
+	if state.limitedEnabled or state.alwaysEnabled then
+		state.restockId = nil
+		ensureBuyLoop()
+	end
 
 	local function createGearSection()
 		local gearShop = ReplicatedStorage.StockValues:WaitForChild("GearShop")
@@ -7534,7 +7670,11 @@ runtime.YupisotesShowShop = function()
 		screenGui:SetAttribute("GearBuyAmount", state.gearBuyAmount)
 		screenGui:SetAttribute("BuyGearIfRestockEnabled", state.gearLimitedEnabled)
 		screenGui:SetAttribute("AlwaysBuyGearIfRestockEnabled", state.gearAlwaysEnabled)
-		screenGui:SetAttribute("AutoBuyGearStatus", "Stopped")
+		screenGui:SetAttribute("AutoBuyGearStatus", (state.gearLimitedEnabled or state.gearAlwaysEnabled) and "Running" or "Stopped")
+		if state.gearLimitedEnabled or state.gearAlwaysEnabled then
+			state.gearRestockId = nil
+			ensureGearLoop()
+		end
 	end
 	createGearSection()
 
@@ -7872,7 +8012,11 @@ runtime.YupisotesShowShop = function()
 		screenGui:SetAttribute("PropsBuyAmount", state.propsBuyAmount)
 		screenGui:SetAttribute("BuyPropsIfRestockEnabled", state.propsLimitedEnabled)
 		screenGui:SetAttribute("AlwaysBuyPropsIfRestockEnabled", state.propsAlwaysEnabled)
-		screenGui:SetAttribute("AutoBuyPropertyStatus", "Stopped")
+		screenGui:SetAttribute("AutoBuyPropertyStatus", (state.propsLimitedEnabled or state.propsAlwaysEnabled) and "Running" or "Stopped")
+		if state.propsLimitedEnabled or state.propsAlwaysEnabled then
+			state.propsRestockId = nil
+			ensurePropertyLoop()
+		end
 	end
 	createPropertySection()
 
@@ -8391,7 +8535,8 @@ runtime.YupisotesShowShop = function()
 		screenGui:SetAttribute("AuctionPriceLimit", state.auctionPriceLimit)
 		screenGui:SetAttribute("AuctionBuyLotCount", state.auctionBuyLotCount)
 		screenGui:SetAttribute("StartAutoBuyAuctionEnabled", state.auctionEnabled)
-		screenGui:SetAttribute("AutoBuyAuctionStatus", "Stopped")
+		screenGui:SetAttribute("AutoBuyAuctionStatus", state.auctionEnabled and "Running" or "Stopped")
+		if state.auctionEnabled then ensureAuctionLoop() end
 	end
 	createAuctionSection()
 end
@@ -8749,6 +8894,7 @@ runtime.YupisotesShowPet = function()
 		end
 	end)
 	renderToggle()
+	if state.enabled then ensureBuyLoop() end
 
 	header.MouseButton1Click:Connect(function()
 		state.categoryOpen = not state.categoryOpen
@@ -8960,6 +9106,7 @@ runtime.YupisotesShowPet = function()
 		end
 	end)
 	renderEggToggle()
+	if state.eggEnabled then startEggLoop() end
 	local eggOpen = false
 	eggHeader.MouseButton1Click:Connect(function()
 		eggOpen = not eggOpen
@@ -9515,6 +9662,7 @@ runtime.YupisotesShowMisc = function()
 		if state.enabled then startLoop() else state.runId += 1; screenGui:SetAttribute("AutoWateringStatus", "Stopped") end
 	end)
 	renderToggle()
+	if state.enabled then startLoop() end
 	local categoryOpen = false
 	header.MouseButton1Click:Connect(function()
 		categoryOpen = not categoryOpen
@@ -9841,6 +9989,7 @@ runtime.YupisotesShowMisc = function()
 	screenGui:SetAttribute("AutoGiftEnabled", state.giftEnabled)
 	screenGui:SetAttribute("AutoGiftStatus", state.giftEnabled and "Running" or "Stopped")
 	screenGui:SetAttribute("AutoAcceptGiftEnabled", state.autoAcceptGift)
+	if state.giftEnabled then startGiftLoop() end
 
 	local mailboxCategories = {
 		Pets = "Pets",
@@ -10209,6 +10358,9 @@ runtime.YupisotesShowMisc = function()
 	screenGui:SetAttribute("MailboxAllEnabled", state.mailAllEnabled)
 	screenGui:SetAttribute("MailboxClaimEnabled", state.mailClaimEnabled)
 	screenGui:SetAttribute("MailboxStatus", "Ready")
+	if state.mailSelectedEnabled then startMailboxSendLoop(false) end
+	if state.mailAllEnabled then startMailboxSendLoop(true) end
+	if state.mailClaimEnabled then startClaimLoop() end
 
 	local autoExecHeader = Instance.new("TextButton")
 	autoExecHeader.Name = "AutoExecHeader"
@@ -10532,6 +10684,11 @@ runtime.YupisotesShowMisc = function()
 	screenGui:SetAttribute("BoostFpsEnabled", state.boostFps)
 	screenGui:SetAttribute("HidePlantScope", state.hidePlantScope)
 	screenGui:SetAttribute("HidePlantEnabled", state.hidePlants)
+	if state.boostFps then setBoostFps(true) end
+	if state.hidePlants then
+		applyPlantHiding()
+		startHidePlantLoop()
+	end
 
 	local runService = game:GetService("RunService")
 	local function getProtectionBase()
@@ -10641,7 +10798,11 @@ runtime.YupisotesShowMisc = function()
 	end)
 	screenGui:SetAttribute("AntiFlingMethod", state.antiFlingMethod)
 	screenGui:SetAttribute("ProtectionEnabled", state.protectionEnabled)
-	if not state.protectionEnabled then screenGui:SetAttribute("ProtectionStatus", "Stopped") end
+	if state.protectionEnabled then
+		applyProtectionMethod()
+	else
+		screenGui:SetAttribute("ProtectionStatus", "Stopped")
+	end
 
 	local httpService = game:GetService("HttpService")
 	local function getRequestFunction()
@@ -12114,6 +12275,34 @@ showFarm()
 		runtime.YupisotesShowConfig()
 end
 end)
+end
+if runtime.YupisotesConfigState.autoLoad then
+if autoPlantEnabled or autoHarvestEnabled or autoSellEnabled or advancedSellEnabled or doubleEnabled
+or autoFavoriteEnabled or autoShovelEnabled or autoShovelFruitEnabled or autoTrowelEnabled
+or autoCollectDroppedSeedEnabled or autoSellPetEnabled or autoLeaveWeatherEnabled then
+pcall(showFarm)
+end
+if runtime.YupisotesShopState.limitedEnabled or runtime.YupisotesShopState.alwaysEnabled
+or runtime.YupisotesShopState.gearLimitedEnabled or runtime.YupisotesShopState.gearAlwaysEnabled
+or runtime.YupisotesShopState.propsLimitedEnabled or runtime.YupisotesShopState.propsAlwaysEnabled
+or runtime.YupisotesShopState.auctionEnabled then
+pcall(runtime.YupisotesShowShop)
+end
+if runtime.YupisotesPetState.enabled or runtime.YupisotesPetState.eggEnabled then
+pcall(runtime.YupisotesShowPet)
+end
+if runtime.YupisotesMiscState.enabled or runtime.YupisotesMiscState.giftEnabled
+or runtime.YupisotesMiscState.autoAcceptGift or runtime.YupisotesMiscState.mailSelectedEnabled
+or runtime.YupisotesMiscState.mailAllEnabled or runtime.YupisotesMiscState.mailClaimEnabled
+or runtime.YupisotesMiscState.autoReconnect or runtime.YupisotesMiscState.boostFps
+or runtime.YupisotesMiscState.hidePlants or runtime.YupisotesMiscState.protectionEnabled
+or runtime.YupisotesMiscState.webhookStockEnabled or runtime.YupisotesMiscState.utilityWebhookEnabled then
+pcall(runtime.YupisotesShowMisc)
+end
+if runtime.YupisotesVisualState.inventoryFruitEnabled or runtime.YupisotesVisualState.gardenFruitEnabled
+or runtime.YupisotesVisualState.gardenValueEnabled or runtime.YupisotesVisualState.selectedFruitValueEnabled then
+pcall(runtime.YupisotesShowVisual)
+end
 end
 showInfo()
 local dragState = {dragging = false}
