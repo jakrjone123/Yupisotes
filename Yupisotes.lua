@@ -841,7 +841,12 @@ runtime.YupisotesSaveConfig = function(name)
 	local ok, encoded = pcall(function() return game:GetService("HttpService"):JSONEncode(runtime.YupisotesExportConfig()) end)
 	if not ok then return false, "Could not encode config" end
 	local wrote, err = pcall(writefile, runtime.YupisotesConfigFolder .. "/" .. name .. ".json", encoded)
-	if wrote then runtime.YupisotesConfigState.name = name; runtime.YupisotesConfigState.selected = name end
+	if wrote then
+		runtime.YupisotesConfigState.name = name
+		runtime.YupisotesConfigState.selected = name
+		pcall(writefile, runtime.YupisotesConfigFolder .. "/" .. name .. ".visualflags", runtime.YupisotesVisualState.selectedFruitValueEnabled and "1" or "0")
+		if runtime.YupisotesConfigState.autoLoad then pcall(writefile, runtime.YupisotesAutoLoadFile, name) end
+	end
 	return wrote, wrote and "Saved " .. name or tostring(err)
 end
 runtime.YupisotesLoadConfig = function(name)
@@ -851,6 +856,10 @@ runtime.YupisotesLoadConfig = function(name)
 	local ok, data = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(path)) end)
 	if not ok or type(data) ~= "table" then return false, "Invalid config" end
 	runtime.YupisotesImportConfig(data)
+	local visualFlagsPath = runtime.YupisotesConfigFolder .. "/" .. name .. ".visualflags"
+	if type(isfile) == "function" and type(readfile) == "function" and isfile(visualFlagsPath) then
+		runtime.YupisotesVisualState.selectedFruitValueEnabled = readfile(visualFlagsPath) == "1"
+	end
 	runtime.YupisotesConfigState.name = name
 	runtime.YupisotesConfigState.selected = name
 	return true, "Loaded " .. name
