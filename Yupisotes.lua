@@ -5,6 +5,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local runtime = (getgenv and getgenv()) or _G
 runtime.YupisotesGeneration = (runtime.YupisotesGeneration or 0) + 1
+if runtime.YupisotesToggleDragChanged then runtime.YupisotesToggleDragChanged:Disconnect() end
+if runtime.YupisotesToggleDragEnded then runtime.YupisotesToggleDragEnded:Disconnect() end
 local autoPlantGeneration = runtime.YupisotesGeneration
 local player = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
 local playerGui = player:WaitForChild("PlayerGui")
@@ -105,6 +107,65 @@ main.BorderSizePixel = 0
 main.ClipsDescendants = true
 main.Parent = screenGui
 corner(main, 12)
+runtime.YupisotesUIToggle = Instance.new("ImageButton")
+runtime.YupisotesUIToggle.Name = "CatUIToggle"
+runtime.YupisotesUIToggle.AutoButtonColor = false
+runtime.YupisotesUIToggle.Image = "rbxthumb://type=Asset&id=7111868109&w=150&h=150"
+runtime.YupisotesUIToggle.ScaleType = Enum.ScaleType.Crop
+runtime.YupisotesUIToggle.BackgroundColor3 = rgb(13, 16, 16)
+runtime.YupisotesUIToggle.BorderSizePixel = 0
+runtime.YupisotesUIToggle.AnchorPoint = Vector2.new(0, 0.5)
+runtime.YupisotesTogglePosition = runtime.YupisotesTogglePosition or UDim2.new(0, 16, 0.5, 0)
+runtime.YupisotesUIToggle.Position = runtime.YupisotesTogglePosition
+runtime.YupisotesUIToggle.Size = UDim2.fromOffset(56, 56)
+runtime.YupisotesUIToggle.ZIndex = 500
+runtime.YupisotesUIToggle.Parent = screenGui
+corner(runtime.YupisotesUIToggle, 16)
+stroke(runtime.YupisotesUIToggle, palette.accent, 0.05, 2)
+runtime.YupisotesUIToggleScale = Instance.new("UIScale")
+runtime.YupisotesUIToggleScale.Scale = 1
+runtime.YupisotesUIToggleScale.Parent = runtime.YupisotesUIToggle
+runtime.YupisotesToggleDrag = {dragging = false, moved = false}
+runtime.YupisotesUIToggle.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+runtime.YupisotesToggleDrag.dragging = true
+runtime.YupisotesToggleDrag.moved = false
+runtime.YupisotesToggleDrag.input = input
+runtime.YupisotesToggleDrag.start = input.Position
+runtime.YupisotesToggleDrag.position = runtime.YupisotesUIToggle.Position
+end
+end)
+runtime.YupisotesMoveToggle = function(input)
+if not runtime.YupisotesToggleDrag.dragging then return end
+if input.UserInputType ~= Enum.UserInputType.MouseMovement and input ~= runtime.YupisotesToggleDrag.input then return end
+local delta = input.Position - runtime.YupisotesToggleDrag.start
+if delta.Magnitude > 5 then runtime.YupisotesToggleDrag.moved = true end
+local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+local x = math.clamp(runtime.YupisotesToggleDrag.position.X.Offset + delta.X, 8, math.max(8, viewport.X - 64))
+local centerY = viewport.Y * 0.5 + runtime.YupisotesToggleDrag.position.Y.Offset + delta.Y
+local y = math.clamp(centerY, 36, math.max(36, viewport.Y - 36)) - viewport.Y * 0.5
+runtime.YupisotesTogglePosition = UDim2.new(0, x, 0.5, y)
+runtime.YupisotesUIToggle.Position = runtime.YupisotesTogglePosition
+end
+runtime.YupisotesToggleDragChanged = UserInputService.InputChanged:Connect(runtime.YupisotesMoveToggle)
+runtime.YupisotesToggleDragEnded = UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input == runtime.YupisotesToggleDrag.input then
+runtime.YupisotesToggleDrag.dragging = false
+runtime.YupisotesToggleDrag.input = nil
+end
+end)
+runtime.YupisotesUIToggle.MouseEnter:Connect(function()
+TweenService:Create(runtime.YupisotesUIToggleScale, TweenInfo.new(0.12), {Scale = 1.08}):Play()
+end)
+runtime.YupisotesUIToggle.MouseLeave:Connect(function()
+TweenService:Create(runtime.YupisotesUIToggleScale, TweenInfo.new(0.12), {Scale = 1}):Play()
+end)
+runtime.YupisotesUIToggle.MouseButton1Click:Connect(function()
+if runtime.YupisotesToggleDrag.moved then return end
+main.Visible = not main.Visible
+screenGui:SetAttribute("WindowOpen", main.Visible)
+end)
+screenGui:SetAttribute("WindowOpen", true)
 local top = Instance.new("Frame")
 top.Name = "TopBar"
 top.BackgroundColor3 = rgb(3, 6, 5)
@@ -181,7 +242,8 @@ close.MouseLeave:Connect(function()
 TweenService:Create(close, TweenInfo.new(0.12), {BackgroundTransparency = 1}):Play()
 end)
 close.MouseButton1Click:Connect(function()
-screenGui:Destroy()
+main.Visible = false
+screenGui:SetAttribute("WindowOpen", false)
 end)
 local body = Instance.new("Frame")
 body.BackgroundTransparency = 1
@@ -450,6 +512,39 @@ local autoLeaveWeatherRunId = 0
 local dailyDealMode = "Full Inventory"
 local dailyDealCount = 100
 local useDailyDeal = false
+runtime.YupisotesShopState = {
+	selectedSeeds = {},
+	selectedRarities = {},
+	buyAmount = 1,
+	limitedEnabled = false,
+	alwaysEnabled = false,
+	runId = 0,
+	purchasedThisRestock = {},
+	restockId = nil,
+	selectedGear = {},
+	gearBuyAmount = 1,
+	gearLimitedEnabled = false,
+	gearAlwaysEnabled = false,
+	gearRunId = 0,
+	gearPurchasedThisRestock = {},
+	gearRestockId = nil,
+	selectedProps = {},
+	propsBuyAmount = 1,
+	propsLimitedEnabled = false,
+	propsAlwaysEnabled = false,
+	propsRunId = 0,
+	propsPurchasedThisRestock = {},
+	propsRestockId = nil,
+	auctionSelections = {Seeds = {}, Gear = {}, SeedPacks = {}, Eggs = {}},
+	auctionPriceMode = "Below",
+	auctionPriceLimit = 0,
+	auctionBuyLotCount = 2,
+	auctionEnabled = false,
+	auctionRunId = 0,
+	auctionCycleId = nil,
+	auctionBought = {},
+	auctionRefreshId = 0,
+}
 local dropdownOpen = false
 local sectionConnection
 local function clearList()
@@ -480,6 +575,7 @@ local function showInfo()
 currentPage = "Info"
 dropdownOpen = false
 disconnectSection()
+section.Visible = true
 section.Parent = content
 section.Position = UDim2.fromOffset(0, 34)
 section.Size = UDim2.new(1, -2, 0, 31)
@@ -1282,7 +1378,7 @@ else
 local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 if humanoid and shovel.Parent ~= player.Character then
 humanoid:EquipTool(shovel)
-task.wait(0.08)
+task.wait(0.05)
 end
 local removed = 0
 for _, target in ipairs(targets) do
@@ -1291,7 +1387,7 @@ break
 end
 if shovel.Parent ~= player.Character and humanoid then
 humanoid:EquipTool(shovel)
-task.wait(0.05)
+task.wait(0.03)
 end
 shovelPending[target.id] = os.clock() + 2
 local ok = pcall(function()
@@ -1301,12 +1397,12 @@ if ok then
 removed += 1
 screenGui:SetAttribute("LastShoveledPlant", target.name)
 end
-task.wait(math.max(0.08, shovelSpeed * 0.1))
+task.wait(math.max(0.05, shovelSpeed * 0.08))
 end
 screenGui:SetAttribute("LastAutoShovelCount", removed)
 screenGui:SetAttribute("AutoShovelStatus", removed > 0 and "Shoveling" or "Waiting")
 end
-task.wait(0.5)
+task.wait(0.25)
 end
 end)
 end
@@ -1753,6 +1849,7 @@ local function showFarm()
 currentPage = "Farm"
 dropdownOpen = false
 disconnectSection()
+section.Visible = true
 setActiveTab("Farm")
 title.Text = "Farm"
 sectionText.Text = "Auto Plant"
@@ -6330,12 +6427,1650 @@ TweenService:Create(categoryContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart,
 TweenService:Create(arrow, TweenInfo.new(0.18), {Rotation = dropdownOpen and 180 or 0}):Play()
 end)
 end
+runtime.YupisotesShowShop = function()
+	currentPage = "Shop"
+	dropdownOpen = false
+	disconnectSection()
+	section.Visible = false
+	setActiveTab("Shop")
+	title.Text = "Shop"
+	section.Parent = content
+	clearList()
+	accentLine.Visible = false
+	farmSectionAccent.Visible = false
+	list.Position = UDim2.fromOffset(0, 34)
+	list.Size = UDim2.new(1, -2, 1, -35)
+	list.CanvasPosition = Vector2.zero
+
+	local state = runtime.YupisotesShopState
+	local stockShop = ReplicatedStorage:WaitForChild("StockValues"):WaitForChild("SeedShop")
+	local stockItems = stockShop:WaitForChild("Items")
+	local restockValue = stockShop:WaitForChild("UnixLastRestock")
+	local entriesByName = {}
+	for _, data in pairs(seedData) do
+		if type(data) == "table" and type(data.SeedName) == "string" then
+			entriesByName[data.SeedName] = data
+		end
+	end
+	local shopSeeds = {}
+	for _, value in ipairs(stockItems:GetChildren()) do
+		if value:IsA("NumberValue") then table.insert(shopSeeds, value.Name) end
+	end
+	table.sort(shopSeeds, function(a, b)
+		local aOrder = entriesByName[a] and entriesByName[a].SeedShopDisplayOrder or math.huge
+		local bOrder = entriesByName[b] and entriesByName[b].SeedShopDisplayOrder or math.huge
+		if aOrder == bOrder then return a < b end
+		return aOrder < bOrder
+	end)
+
+	local function selectedTargets()
+		local targets = {}
+		local useRarity = selectionCount(state.selectedRarities) > 0
+		for _, seedName in ipairs(shopSeeds) do
+			local selected = useRarity and state.selectedRarities[seedRarities[seedName]] or state.selectedSeeds[seedName]
+			if selected then table.insert(targets, seedName) end
+		end
+		return targets
+	end
+
+	local function ensureBuyLoop()
+		state.runId += 1
+		local runId = state.runId
+		local generation = autoPlantGeneration
+		task.spawn(function()
+			while (state.limitedEnabled or state.alwaysEnabled) and state.runId == runId
+				and runtime.YupisotesGeneration == generation and screenGui.Parent do
+				local currentRestock = restockValue.Value
+				if state.restockId ~= currentRestock then
+					state.restockId = currentRestock
+					state.purchasedThisRestock = {}
+				end
+				local targets = selectedTargets()
+				if #targets == 0 then
+					screenGui:SetAttribute("AutoBuySeedsStatus", "Select a seed or rarity")
+					task.wait(0.5)
+					continue
+				end
+				local attempted = false
+				for _, seedName in ipairs(targets) do
+					if state.runId ~= runId or not (state.limitedEnabled or state.alwaysEnabled) then break end
+					local stockValue = stockItems:FindFirstChild(seedName)
+					local stock = stockValue and stockValue.Value or 0
+					local bought = state.purchasedThisRestock[seedName] or 0
+					local shouldBuy = stock > 0 and (state.alwaysEnabled or bought < state.buyAmount)
+					if shouldBuy then
+						attempted = true
+						local ok = pcall(function()
+							networking.SeedShop.PurchaseSeed:Fire(seedName)
+						end)
+						if ok and state.limitedEnabled then
+							state.purchasedThisRestock[seedName] = bought + 1
+						end
+						screenGui:SetAttribute("LastAutoBoughtSeed", seedName)
+						screenGui:SetAttribute("AutoBuySeedsStatus", ok and ("Buying " .. seedName) or "Purchase failed")
+						task.wait(0.16)
+					end
+				end
+				if not attempted then
+					screenGui:SetAttribute("AutoBuySeedsStatus", "Waiting for restock")
+				end
+				task.wait(0.35)
+			end
+		end)
+	end
+
+	local shopHeader = Instance.new("TextButton")
+	shopHeader.Name = "AutoBuySeedsHeader"
+	shopHeader.AutoButtonColor = false
+	shopHeader.Text = ""
+	shopHeader.BackgroundColor3 = palette.card
+	shopHeader.BorderSizePixel = 0
+	shopHeader.Size = UDim2.new(1, 0, 0, 31)
+	shopHeader.LayoutOrder = 0
+	shopHeader.Parent = list
+	corner(shopHeader, 4)
+	local headerText = label(shopHeader, "Auto Buy Seeds", 13, palette.text, true)
+	headerText.Position = UDim2.fromOffset(10, 0)
+	headerText.Size = UDim2.new(1, -40, 1, 0)
+	local headerArrow = label(shopHeader, "v", 14, rgb(210, 210, 216), true)
+	headerArrow.Position = UDim2.new(1, -28, 0, 0)
+	headerArrow.Size = UDim2.fromOffset(20, 31)
+	headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+	local headerAccent = Instance.new("Frame")
+	headerAccent.BackgroundColor3 = palette.accent
+	headerAccent.BorderSizePixel = 0
+	headerAccent.Position = UDim2.new(0, 0, 1, -2)
+	headerAccent.Size = UDim2.new(1, 0, 0, 2)
+	headerAccent.Parent = shopHeader
+
+	local shopContent = Instance.new("Frame")
+	shopContent.Name = "AutoBuySeedsContent"
+	shopContent.BackgroundTransparency = 1
+	shopContent.BorderSizePixel = 0
+	shopContent.ClipsDescendants = true
+	shopContent.Size = UDim2.new(1, 0, 0, 0)
+	shopContent.LayoutOrder = 1
+	shopContent.Parent = list
+
+	local filters = {}
+	local function closeFilters(except)
+		for _, filter in ipairs(filters) do
+			if filter ~= except then filter.setOpen(false) end
+		end
+	end
+	local function makeFilter(name, titleText, descriptionText, y, height, choices, selected, zIndex)
+		local entry = {open = false}
+		local row = Instance.new("Frame")
+		row.BackgroundColor3 = palette.card
+		row.BorderSizePixel = 0
+		row.Position = UDim2.fromOffset(0, y)
+		row.Size = UDim2.new(1, 0, 0, height)
+		row.Parent = shopContent
+		corner(row, 4)
+		local rowTitle = label(row, titleText, 12, palette.text, true)
+		rowTitle.Position = UDim2.fromOffset(10, 4)
+		rowTitle.Size = UDim2.new(0.62, -10, 0, titleText == "Seed List" and 18 or 30)
+		rowTitle.TextWrapped = true
+		rowTitle.TextYAlignment = Enum.TextYAlignment.Top
+		local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+		rowDescription.Position = UDim2.fromOffset(10, titleText == "Seed List" and 22 or 34)
+		rowDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		rowDescription.TextWrapped = true
+
+		local button = Instance.new("TextButton")
+		button.Name = name .. "Button"
+		button.AutoButtonColor = false
+		button.Font = Enum.Font.GothamBold
+		button.TextSize = 11
+		button.TextColor3 = palette.muted
+		button.TextXAlignment = Enum.TextXAlignment.Left
+		button.TextTruncate = Enum.TextTruncate.AtEnd
+		button.BackgroundColor3 = rgb(31, 26, 43)
+		button.BorderSizePixel = 0
+		button.Position = UDim2.new(0.62, 0, 0, math.floor((height - 32) / 2))
+		button.Size = UDim2.new(0.38, -7, 0, 32)
+		button.Parent = row
+		corner(button, 4)
+		stroke(button, rgb(72, 48, 96), 0.45, 1)
+		padding(button, 10, 0, 30, 0)
+		local buttonArrow = label(button, "v", 13, rgb(210, 210, 216), true)
+		buttonArrow.Position = UDim2.new(1, -30, 0, 0)
+		buttonArrow.Size = UDim2.fromOffset(20, 32)
+		buttonArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+		local panel = Instance.new("Frame")
+		panel.Name = name .. "Dropdown"
+		panel.BackgroundColor3 = rgb(18, 18, 25)
+		panel.BorderSizePixel = 0
+		panel.ClipsDescendants = true
+		panel.Position = UDim2.new(0.62, 0, 0, y + height - 4)
+		panel.Size = UDim2.new(0.38, -7, 0, 0)
+		panel.ZIndex = zIndex
+		panel.Parent = shopContent
+		corner(panel, 4)
+		stroke(panel, rgb(91, 39, 124), 0.1, 1)
+		local searchBox = Instance.new("TextBox")
+		searchBox.Name = name .. "Search"
+		searchBox.ClearTextOnFocus = false
+		searchBox.PlaceholderText = "Search"
+		searchBox.Text = ""
+		searchBox.Font = Enum.Font.GothamMedium
+		searchBox.TextSize = 11
+		searchBox.TextColor3 = palette.text
+		searchBox.PlaceholderColor3 = palette.muted
+		searchBox.BackgroundColor3 = rgb(35, 27, 48)
+		searchBox.BorderSizePixel = 0
+		searchBox.Position = UDim2.fromOffset(4, 4)
+		searchBox.Size = UDim2.new(1, -8, 0, 26)
+		searchBox.ZIndex = zIndex + 1
+		searchBox.Parent = panel
+		corner(searchBox, 3)
+		local optionList = Instance.new("ScrollingFrame")
+		optionList.BackgroundTransparency = 1
+		optionList.BorderSizePixel = 0
+		optionList.CanvasSize = UDim2.fromOffset(0, 0)
+		optionList.ScrollBarImageColor3 = palette.accent
+		optionList.ScrollBarThickness = 3
+		optionList.Position = UDim2.fromOffset(4, 34)
+		optionList.Size = UDim2.new(1, -8, 1, -38)
+		optionList.ZIndex = zIndex + 1
+		optionList.Parent = panel
+		local optionLayout = Instance.new("UIListLayout")
+		optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		optionLayout.Padding = UDim.new(0, 2)
+		optionLayout.Parent = optionList
+		local optionButtons = {}
+		local function refreshSummary()
+			local names = {}
+			for _, choice in ipairs(choices) do
+				if selected[choice] then table.insert(names, choice) end
+			end
+			button.Text = #names == 0 and "Select Options" or table.concat(names, ", ")
+			button.TextColor3 = #names == 0 and palette.muted or palette.text
+		end
+		local function updateCanvas()
+			optionList.CanvasSize = UDim2.fromOffset(0, optionLayout.AbsoluteContentSize.Y)
+		end
+		for index, choice in ipairs(choices) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = choice
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 11
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, -3, 0, 27)
+			option.LayoutOrder = index
+			option.ZIndex = zIndex + 2
+			option.Parent = optionList
+			corner(option, 3)
+			padding(option, 10, 0, 0, 0)
+			local function render()
+				local isSelected = selected[choice] == true
+				option.TextColor3 = isSelected and rgb(221, 154, 255) or palette.text
+				option.BackgroundColor3 = isSelected and rgb(48, 28, 64) or rgb(17, 18, 24)
+				option.BackgroundTransparency = isSelected and 0.1 or 0.35
+			end
+			render()
+			option.MouseButton1Click:Connect(function()
+				selected[choice] = not selected[choice] and true or nil
+				render()
+				refreshSummary()
+			end)
+			table.insert(optionButtons, option)
+		end
+		refreshSummary()
+		updateCanvas()
+		optionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+		searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			local query = string.lower(searchBox.Text)
+			for _, option in ipairs(optionButtons) do
+				option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+			end
+			optionList.CanvasPosition = Vector2.zero
+			updateCanvas()
+		end)
+		function entry.setOpen(open)
+			entry.open = open
+			panel.Size = UDim2.new(0.38, -7, 0, open and 170 or 0)
+			buttonArrow.Rotation = open and 180 or 0
+		end
+		button.MouseButton1Click:Connect(function()
+			closeFilters(entry)
+			entry.setOpen(not entry.open)
+		end)
+		table.insert(filters, entry)
+		return entry
+	end
+
+	makeFilter("ShopSeedList", "Seed List", "Choose which seeds to buy from restock.", 0, 58, shopSeeds, state.selectedSeeds, 320)
+	makeFilter("ShopRarityList", "Rarity List (dont select Seed List if use this)", "Buy seeds from these rarities instead of selected names.", 64, 64, rarityOptions, state.selectedRarities, 330)
+
+	local amountRow = Instance.new("Frame")
+	amountRow.BackgroundColor3 = palette.card
+	amountRow.BorderSizePixel = 0
+	amountRow.Position = UDim2.fromOffset(0, 134)
+	amountRow.Size = UDim2.new(1, 0, 0, 48)
+	amountRow.Parent = shopContent
+	corner(amountRow, 4)
+	local amountTitle = label(amountRow, "Seeds Buy Amount", 12, palette.text, true)
+	amountTitle.Position = UDim2.fromOffset(10, 4)
+	amountTitle.Size = UDim2.new(0.62, -10, 0, 18)
+	local amountDescription = label(amountRow, "How many seeds to buy from each restock.", 10, palette.muted, false)
+	amountDescription.Position = UDim2.fromOffset(10, 21)
+	amountDescription.Size = UDim2.new(0.62, -10, 0, 20)
+	local amountInput = Instance.new("TextBox")
+	amountInput.Name = "SeedsBuyAmountInput"
+	amountInput.ClearTextOnFocus = false
+	amountInput.Text = tostring(state.buyAmount)
+	amountInput.Font = Enum.Font.GothamBold
+	amountInput.TextSize = 11
+	amountInput.TextColor3 = palette.text
+	amountInput.TextXAlignment = Enum.TextXAlignment.Left
+	amountInput.BackgroundColor3 = rgb(31, 26, 43)
+	amountInput.BorderSizePixel = 0
+	amountInput.Position = UDim2.new(0.62, 0, 0, 8)
+	amountInput.Size = UDim2.new(0.38, -7, 0, 32)
+	amountInput.Parent = amountRow
+	corner(amountInput, 4)
+	stroke(amountInput, rgb(91, 39, 124), 0.25, 1)
+	padding(amountInput, 8, 0, 8, 0)
+	local function commitAmount()
+		state.buyAmount = math.clamp(math.floor(tonumber(amountInput.Text) or 1), 1, 999)
+		amountInput.Text = tostring(state.buyAmount)
+		screenGui:SetAttribute("SeedsBuyAmount", state.buyAmount)
+	end
+	amountInput.FocusLost:Connect(commitAmount)
+
+	local toggleRefs = {}
+	local function createToggle(name, titleText, descriptionText, y, stateKey)
+		local row = Instance.new("Frame")
+		row.BackgroundColor3 = palette.card
+		row.BorderSizePixel = 0
+		row.Position = UDim2.fromOffset(0, y)
+		row.Size = UDim2.new(1, 0, 0, 48)
+		row.Parent = shopContent
+		corner(row, 4)
+		local rowTitle = label(row, titleText, 12, palette.text, true)
+		rowTitle.Position = UDim2.fromOffset(10, 4)
+		rowTitle.Size = UDim2.new(0.78, -10, 0, 18)
+		local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+		rowDescription.Position = UDim2.fromOffset(10, 21)
+		rowDescription.Size = UDim2.new(0.78, -10, 0, 20)
+		local toggle = Instance.new("TextButton")
+		toggle.Name = name
+		toggle.AutoButtonColor = false
+		toggle.Text = ""
+		toggle.BorderSizePixel = 0
+		toggle.Position = UDim2.new(1, -50, 0.5, -11)
+		toggle.Size = UDim2.fromOffset(38, 22)
+		toggle.Parent = row
+		corner(toggle, 11)
+		stroke(toggle, rgb(116, 70, 152), 0.45, 1)
+		local knob = Instance.new("Frame")
+		knob.BackgroundColor3 = rgb(239, 239, 243)
+		knob.BorderSizePixel = 0
+		knob.Size = UDim2.fromOffset(16, 16)
+		knob.Parent = toggle
+		corner(knob, 8)
+		local function render()
+			local enabled = state[stateKey]
+			TweenService:Create(toggle, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				BackgroundColor3 = enabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = enabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+		end
+		toggleRefs[stateKey] = {render = render}
+		toggle.MouseButton1Click:Connect(function()
+			commitAmount()
+			state[stateKey] = not state[stateKey]
+			if state[stateKey] then
+				local otherKey = stateKey == "limitedEnabled" and "alwaysEnabled" or "limitedEnabled"
+				state[otherKey] = false
+			end
+			for _, ref in pairs(toggleRefs) do ref.render() end
+			screenGui:SetAttribute("BuySeedsIfRestockEnabled", state.limitedEnabled)
+			screenGui:SetAttribute("AlwaysBuySeedsIfRestockEnabled", state.alwaysEnabled)
+			if state.limitedEnabled or state.alwaysEnabled then
+				state.restockId = nil
+				ensureBuyLoop()
+			else
+				state.runId += 1
+				screenGui:SetAttribute("AutoBuySeedsStatus", "Stopped")
+			end
+		end)
+		render()
+	end
+
+	createToggle("AlwaysBuySeedsIfRestockToggle", "Always Buy Seeds If Restock", "Keeps buying your selected seeds while stock is available.", 188, "alwaysEnabled")
+
+	local categoryOpen = false
+	shopHeader.MouseButton1Click:Connect(function()
+		categoryOpen = not categoryOpen
+		if not categoryOpen then closeFilters() end
+		TweenService:Create(shopContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Size = UDim2.new(1, 0, 0, categoryOpen and 251 or 0),
+		}):Play()
+		TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+			Rotation = categoryOpen and 180 or 0,
+		}):Play()
+	end)
+
+	screenGui:SetAttribute("SeedsBuyAmount", state.buyAmount)
+	screenGui:SetAttribute("BuySeedsIfRestockEnabled", state.limitedEnabled)
+	screenGui:SetAttribute("AlwaysBuySeedsIfRestockEnabled", state.alwaysEnabled)
+	screenGui:SetAttribute("AutoBuySeedsStatus", "Stopped")
+
+	local function createGearSection()
+		local gearShop = ReplicatedStorage.StockValues:WaitForChild("GearShop")
+		local gearItems = gearShop:WaitForChild("Items")
+		local gearRestockValue = gearShop:WaitForChild("UnixLastRestock")
+		local gearData = require(ReplicatedStorage.SharedModules:WaitForChild("GearShopData")).Data
+		local gearNames = {}
+		local oneTimeGear = {}
+		for _, data in ipairs(gearData) do
+			local gearName = data.Name or data.GearName or data.ItemName
+			if type(gearName) == "string" and gearItems:FindFirstChild(gearName) then
+				table.insert(gearNames, gearName)
+				if data.EquippableGear == true then oneTimeGear[gearName] = true end
+			end
+		end
+
+		local function getOwnedGear()
+			local ok, result = pcall(function()
+				return networking.GearShop.RequestEquippableState:Fire()
+			end)
+			if ok and type(result) == "table" and type(result.OwnedEquippableGears) == "table" then
+				return result.OwnedEquippableGears
+			end
+			return {}
+		end
+
+		local function selectedGearTargets()
+			local targets = {}
+			for _, gearName in ipairs(gearNames) do
+				if state.selectedGear[gearName] then table.insert(targets, gearName) end
+			end
+			return targets
+		end
+
+		local function ensureGearLoop()
+			state.gearRunId += 1
+			local runId = state.gearRunId
+			local generation = autoPlantGeneration
+			task.spawn(function()
+				while (state.gearLimitedEnabled or state.gearAlwaysEnabled) and state.gearRunId == runId
+					and runtime.YupisotesGeneration == generation and screenGui.Parent do
+					local currentRestock = gearRestockValue.Value
+					if state.gearRestockId ~= currentRestock then
+						state.gearRestockId = currentRestock
+						state.gearPurchasedThisRestock = {}
+					end
+					local targets = selectedGearTargets()
+					if #targets == 0 then
+						screenGui:SetAttribute("AutoBuyGearStatus", "Select at least one gear")
+						task.wait(0.5)
+						continue
+					end
+					local attempted = false
+					local ownedFound = false
+					for _, gearName in ipairs(targets) do
+						if state.gearRunId ~= runId or not (state.gearLimitedEnabled or state.gearAlwaysEnabled) then break end
+						local stockValue = gearItems:FindFirstChild(gearName)
+						local stock = stockValue and stockValue.Value or 0
+						local bought = state.gearPurchasedThisRestock[gearName] or 0
+						local isOneTime = oneTimeGear[gearName] == true
+						local ownedBefore = isOneTime and getOwnedGear()[gearName] == true
+						local shouldBuy = (isOneTime and not ownedBefore)
+							or (not isOneTime and stock > 0 and (state.gearAlwaysEnabled or bought < state.gearBuyAmount))
+						if shouldBuy then
+							attempted = true
+							local leaderstats = player:FindFirstChild("leaderstats")
+							local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+							local balanceBefore = sheckles and sheckles.Value
+							local ok = pcall(function()
+								networking.GearShop.PurchaseGear:Fire(gearName)
+							end)
+							-- The server ignores purchase requests sent too close together. Give it
+							-- time to process and only count purchases confirmed by the balance.
+							task.wait(0.4)
+							local purchased = ok and ((isOneTime and getOwnedGear()[gearName] == true)
+								or (not isOneTime and (not sheckles or sheckles.Value < balanceBefore)))
+							if purchased and state.gearLimitedEnabled and not isOneTime then
+								state.gearPurchasedThisRestock[gearName] = bought + 1
+							end
+							if purchased then
+								screenGui:SetAttribute("LastAutoBoughtGear", gearName)
+								screenGui:SetAttribute("AutoBuyGearStatus", "Bought " .. gearName)
+							else
+								screenGui:SetAttribute("AutoBuyGearStatus", "Retrying " .. gearName)
+							end
+						elseif ownedBefore then
+							ownedFound = true
+							screenGui:SetAttribute("AutoBuyGearStatus", "Already owned: " .. gearName)
+						end
+					end
+					if not attempted and not ownedFound then screenGui:SetAttribute("AutoBuyGearStatus", "Waiting for restock") end
+					task.wait(0.35)
+				end
+			end)
+		end
+
+		local gearHeader = Instance.new("TextButton")
+		gearHeader.Name = "AutoBuyGearHeader"
+		gearHeader.AutoButtonColor = false
+		gearHeader.Text = ""
+		gearHeader.BackgroundColor3 = palette.card
+		gearHeader.BorderSizePixel = 0
+		gearHeader.Size = UDim2.new(1, 0, 0, 31)
+		gearHeader.LayoutOrder = 2
+		gearHeader.Parent = list
+		corner(gearHeader, 4)
+		local headerText = label(gearHeader, "Auto Buy Gear", 13, palette.text, true)
+		headerText.Position = UDim2.fromOffset(10, 0)
+		headerText.Size = UDim2.new(1, -40, 1, 0)
+		local headerArrow = label(gearHeader, "v", 14, rgb(210, 210, 216), true)
+		headerArrow.Position = UDim2.new(1, -28, 0, 0)
+		headerArrow.Size = UDim2.fromOffset(20, 31)
+		headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local headerAccent = Instance.new("Frame")
+		headerAccent.BackgroundColor3 = palette.accent
+		headerAccent.BorderSizePixel = 0
+		headerAccent.Position = UDim2.new(0, 0, 1, -2)
+		headerAccent.Size = UDim2.new(1, 0, 0, 2)
+		headerAccent.Parent = gearHeader
+
+		local gearContent = Instance.new("Frame")
+		gearContent.Name = "AutoBuyGearContent"
+		gearContent.BackgroundTransparency = 1
+		gearContent.BorderSizePixel = 0
+		gearContent.ClipsDescendants = true
+		gearContent.Size = UDim2.new(1, 0, 0, 0)
+		gearContent.LayoutOrder = 3
+		gearContent.Parent = list
+
+		local gearRow = Instance.new("Frame")
+		gearRow.BackgroundColor3 = palette.card
+		gearRow.BorderSizePixel = 0
+		gearRow.Position = UDim2.fromOffset(0, 0)
+		gearRow.Size = UDim2.new(1, 0, 0, 58)
+		gearRow.Parent = gearContent
+		corner(gearRow, 4)
+		local gearTitle = label(gearRow, "Gear List", 12, palette.text, true)
+		gearTitle.Position = UDim2.fromOffset(10, 4)
+		gearTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local gearDescription = label(gearRow, "Choose which gear to buy from restock.", 10, palette.muted, false)
+		gearDescription.Position = UDim2.fromOffset(10, 22)
+		gearDescription.Size = UDim2.new(0.62, -10, 0, 20)
+
+		local gearButton = Instance.new("TextButton")
+		gearButton.Name = "ShopGearListButton"
+		gearButton.AutoButtonColor = false
+		gearButton.Font = Enum.Font.GothamBold
+		gearButton.TextSize = 11
+		gearButton.TextColor3 = palette.muted
+		gearButton.TextXAlignment = Enum.TextXAlignment.Left
+		gearButton.TextTruncate = Enum.TextTruncate.AtEnd
+		gearButton.Text = "Select Options"
+		gearButton.BackgroundColor3 = rgb(31, 26, 43)
+		gearButton.BorderSizePixel = 0
+		gearButton.Position = UDim2.new(0.62, 0, 0, 13)
+		gearButton.Size = UDim2.new(0.38, -7, 0, 32)
+		gearButton.Parent = gearRow
+		corner(gearButton, 4)
+		stroke(gearButton, rgb(72, 48, 96), 0.45, 1)
+		padding(gearButton, 10, 0, 30, 0)
+		local gearArrow = label(gearButton, "v", 13, rgb(210, 210, 216), true)
+		gearArrow.Position = UDim2.new(1, -30, 0, 0)
+		gearArrow.Size = UDim2.fromOffset(20, 32)
+		gearArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+		local gearPanel = Instance.new("Frame")
+		gearPanel.Name = "ShopGearListDropdown"
+		gearPanel.BackgroundColor3 = rgb(18, 18, 25)
+		gearPanel.BorderSizePixel = 0
+		gearPanel.ClipsDescendants = true
+		gearPanel.Position = UDim2.new(0.62, 0, 0, 54)
+		gearPanel.Size = UDim2.new(0.38, -7, 0, 0)
+		gearPanel.ZIndex = 340
+		gearPanel.Parent = gearContent
+		corner(gearPanel, 4)
+		stroke(gearPanel, rgb(91, 39, 124), 0.1, 1)
+		local searchBox = Instance.new("TextBox")
+		searchBox.Name = "ShopGearListSearch"
+		searchBox.ClearTextOnFocus = false
+		searchBox.PlaceholderText = "Search"
+		searchBox.Text = ""
+		searchBox.Font = Enum.Font.GothamMedium
+		searchBox.TextSize = 11
+		searchBox.TextColor3 = palette.text
+		searchBox.PlaceholderColor3 = palette.muted
+		searchBox.BackgroundColor3 = rgb(35, 27, 48)
+		searchBox.BorderSizePixel = 0
+		searchBox.Position = UDim2.fromOffset(4, 4)
+		searchBox.Size = UDim2.new(1, -8, 0, 26)
+		searchBox.ZIndex = 341
+		searchBox.Parent = gearPanel
+		corner(searchBox, 3)
+		local optionList = Instance.new("ScrollingFrame")
+		optionList.BackgroundTransparency = 1
+		optionList.BorderSizePixel = 0
+		optionList.CanvasSize = UDim2.fromOffset(0, 0)
+		optionList.ScrollBarImageColor3 = palette.accent
+		optionList.ScrollBarThickness = 3
+		optionList.Position = UDim2.fromOffset(4, 34)
+		optionList.Size = UDim2.new(1, -8, 1, -38)
+		optionList.ZIndex = 341
+		optionList.Parent = gearPanel
+		local optionLayout = Instance.new("UIListLayout")
+		optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		optionLayout.Padding = UDim.new(0, 2)
+		optionLayout.Parent = optionList
+		local optionButtons = {}
+		local function refreshGearSummary()
+			local names = selectedGearTargets()
+			gearButton.Text = #names == 0 and "Select Options" or table.concat(names, ", ")
+			gearButton.TextColor3 = #names == 0 and palette.muted or palette.text
+		end
+		local function updateCanvas()
+			optionList.CanvasSize = UDim2.fromOffset(0, optionLayout.AbsoluteContentSize.Y)
+		end
+		for index, gearName in ipairs(gearNames) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = gearName
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 11
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, -3, 0, 27)
+			option.LayoutOrder = index
+			option.ZIndex = 342
+			option.Parent = optionList
+			corner(option, 3)
+			padding(option, 10, 0, 0, 0)
+			local function render()
+				local selected = state.selectedGear[gearName] == true
+				option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+				option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+				option.BackgroundTransparency = selected and 0.1 or 0.35
+			end
+			render()
+			option.MouseButton1Click:Connect(function()
+				state.selectedGear[gearName] = not state.selectedGear[gearName] and true or nil
+				render()
+				refreshGearSummary()
+			end)
+			table.insert(optionButtons, option)
+		end
+		refreshGearSummary()
+		updateCanvas()
+		optionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+		searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			local query = string.lower(searchBox.Text)
+			for _, option in ipairs(optionButtons) do
+				option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+			end
+			optionList.CanvasPosition = Vector2.zero
+			updateCanvas()
+		end)
+
+		local amountRow = Instance.new("Frame")
+		amountRow.BackgroundColor3 = palette.card
+		amountRow.BorderSizePixel = 0
+		amountRow.Position = UDim2.fromOffset(0, 64)
+		amountRow.Size = UDim2.new(1, 0, 0, 48)
+		amountRow.Parent = gearContent
+		corner(amountRow, 4)
+		local amountTitle = label(amountRow, "Gear Buy Amount", 12, palette.text, true)
+		amountTitle.Position = UDim2.fromOffset(10, 4)
+		amountTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local amountDescription = label(amountRow, "How many gear to buy from each restock.", 10, palette.muted, false)
+		amountDescription.Position = UDim2.fromOffset(10, 21)
+		amountDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		local amountInput = Instance.new("TextBox")
+		amountInput.Name = "GearBuyAmountInput"
+		amountInput.ClearTextOnFocus = false
+		amountInput.Text = tostring(state.gearBuyAmount)
+		amountInput.Font = Enum.Font.GothamBold
+		amountInput.TextSize = 11
+		amountInput.TextColor3 = palette.text
+		amountInput.TextXAlignment = Enum.TextXAlignment.Left
+		amountInput.BackgroundColor3 = rgb(31, 26, 43)
+		amountInput.BorderSizePixel = 0
+		amountInput.Position = UDim2.new(0.62, 0, 0, 8)
+		amountInput.Size = UDim2.new(0.38, -7, 0, 32)
+		amountInput.Parent = amountRow
+		corner(amountInput, 4)
+		stroke(amountInput, rgb(91, 39, 124), 0.25, 1)
+		padding(amountInput, 8, 0, 8, 0)
+		local function commitAmount()
+			state.gearBuyAmount = math.clamp(math.floor(tonumber(amountInput.Text) or 1), 1, 999)
+			amountInput.Text = tostring(state.gearBuyAmount)
+			screenGui:SetAttribute("GearBuyAmount", state.gearBuyAmount)
+		end
+		amountInput.FocusLost:Connect(commitAmount)
+
+		local toggleRefs = {}
+		local function createToggle(name, titleText, descriptionText, y, key)
+			local row = Instance.new("Frame")
+			row.BackgroundColor3 = palette.card
+			row.BorderSizePixel = 0
+			row.Position = UDim2.fromOffset(0, y)
+			row.Size = UDim2.new(1, 0, 0, 48)
+			row.Parent = gearContent
+			corner(row, 4)
+			local rowTitle = label(row, titleText, 12, palette.text, true)
+			rowTitle.Position = UDim2.fromOffset(10, 4)
+			rowTitle.Size = UDim2.new(0.78, -10, 0, 18)
+			local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+			rowDescription.Position = UDim2.fromOffset(10, 21)
+			rowDescription.Size = UDim2.new(0.78, -10, 0, 20)
+			local toggle = Instance.new("TextButton")
+			toggle.Name = name
+			toggle.AutoButtonColor = false
+			toggle.Text = ""
+			toggle.BorderSizePixel = 0
+			toggle.Position = UDim2.new(1, -50, 0.5, -11)
+			toggle.Size = UDim2.fromOffset(38, 22)
+			toggle.Parent = row
+			corner(toggle, 11)
+			stroke(toggle, rgb(116, 70, 152), 0.45, 1)
+			local knob = Instance.new("Frame")
+			knob.BackgroundColor3 = rgb(239, 239, 243)
+			knob.BorderSizePixel = 0
+			knob.Size = UDim2.fromOffset(16, 16)
+			knob.Parent = toggle
+			corner(knob, 8)
+			local function render()
+				local enabled = state[key]
+				TweenService:Create(toggle, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					BackgroundColor3 = enabled and palette.accent or rgb(48, 46, 58),
+				}):Play()
+				TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Position = enabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+				}):Play()
+			end
+			toggleRefs[key] = {render = render}
+			toggle.MouseButton1Click:Connect(function()
+				commitAmount()
+				state[key] = not state[key]
+				if state[key] then
+					local otherKey = key == "gearLimitedEnabled" and "gearAlwaysEnabled" or "gearLimitedEnabled"
+					state[otherKey] = false
+				end
+				for _, ref in pairs(toggleRefs) do ref.render() end
+				screenGui:SetAttribute("BuyGearIfRestockEnabled", state.gearLimitedEnabled)
+				screenGui:SetAttribute("AlwaysBuyGearIfRestockEnabled", state.gearAlwaysEnabled)
+				if state.gearLimitedEnabled or state.gearAlwaysEnabled then
+					state.gearRestockId = nil
+					ensureGearLoop()
+				else
+					state.gearRunId += 1
+					screenGui:SetAttribute("AutoBuyGearStatus", "Stopped")
+				end
+			end)
+			render()
+		end
+
+		createToggle("AlwaysBuyGearIfRestockToggle", "Always Buy Gear If Restock", "Buys all available gear stock while you can afford it.", 118, "gearAlwaysEnabled")
+
+		local categoryOpen = false
+		local dropdownOpen = false
+		gearButton.MouseButton1Click:Connect(function()
+			dropdownOpen = not dropdownOpen
+			gearPanel.Size = UDim2.new(0.38, -7, 0, dropdownOpen and 160 or 0)
+			gearArrow.Rotation = dropdownOpen and 180 or 0
+		end)
+		gearHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then
+				dropdownOpen = false
+				gearPanel.Size = UDim2.new(0.38, -7, 0, 0)
+				gearArrow.Rotation = 0
+			end
+			TweenService:Create(gearContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 166 or 0),
+			}):Play()
+			TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("GearBuyAmount", state.gearBuyAmount)
+		screenGui:SetAttribute("BuyGearIfRestockEnabled", state.gearLimitedEnabled)
+		screenGui:SetAttribute("AlwaysBuyGearIfRestockEnabled", state.gearAlwaysEnabled)
+		screenGui:SetAttribute("AutoBuyGearStatus", "Stopped")
+	end
+	createGearSection()
+
+	local function createPropertySection()
+		local crateShop = ReplicatedStorage.StockValues:WaitForChild("CrateShop")
+		local crateItems = crateShop:WaitForChild("Items")
+		local crateRestockValue = crateShop:WaitForChild("UnixLastRestock")
+		local propertyNames = {}
+		for _, value in ipairs(crateItems:GetChildren()) do
+			if value:IsA("NumberValue") then table.insert(propertyNames, value.Name) end
+		end
+		table.sort(propertyNames)
+
+		local function selectedPropertyTargets()
+			local targets = {}
+			for _, propertyName in ipairs(propertyNames) do
+				if state.selectedProps[propertyName] then table.insert(targets, propertyName) end
+			end
+			return targets
+		end
+
+		local function ensurePropertyLoop()
+			state.propsRunId += 1
+			local runId = state.propsRunId
+			local generation = autoPlantGeneration
+			task.spawn(function()
+				while (state.propsLimitedEnabled or state.propsAlwaysEnabled) and state.propsRunId == runId
+					and runtime.YupisotesGeneration == generation and screenGui.Parent do
+					local currentRestock = crateRestockValue.Value
+					if state.propsRestockId ~= currentRestock then
+						state.propsRestockId = currentRestock
+						state.propsPurchasedThisRestock = {}
+					end
+					local targets = selectedPropertyTargets()
+					if #targets == 0 then
+						screenGui:SetAttribute("AutoBuyPropertyStatus", "Select at least one property")
+						task.wait(0.5)
+						continue
+					end
+					local attempted = false
+					for _, propertyName in ipairs(targets) do
+						if state.propsRunId ~= runId or not (state.propsLimitedEnabled or state.propsAlwaysEnabled) then break end
+						local stockValue = crateItems:FindFirstChild(propertyName)
+						local stock = stockValue and stockValue.Value or 0
+						local bought = state.propsPurchasedThisRestock[propertyName] or 0
+						local shouldBuy = stock > 0 and (state.propsAlwaysEnabled or bought < state.propsBuyAmount)
+						if shouldBuy then
+							attempted = true
+							local leaderstats = player:FindFirstChild("leaderstats")
+							local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+							local balanceBefore = sheckles and sheckles.Value
+							local ok = pcall(function()
+								networking.CrateShop.PurchaseCrate:Fire(propertyName)
+							end)
+							task.wait(0.4)
+							local purchased = ok and (not sheckles or sheckles.Value < balanceBefore)
+							if purchased and state.propsLimitedEnabled then
+								state.propsPurchasedThisRestock[propertyName] = bought + 1
+							end
+							if purchased then
+								screenGui:SetAttribute("LastAutoBoughtProperty", propertyName)
+								screenGui:SetAttribute("AutoBuyPropertyStatus", "Bought " .. propertyName)
+							else
+								screenGui:SetAttribute("AutoBuyPropertyStatus", "Retrying " .. propertyName)
+							end
+						end
+					end
+					if not attempted then screenGui:SetAttribute("AutoBuyPropertyStatus", "Waiting for restock") end
+					task.wait(0.35)
+				end
+			end)
+		end
+
+		local propertyHeader = Instance.new("TextButton")
+		propertyHeader.Name = "AutoBuyPropertyHeader"
+		propertyHeader.AutoButtonColor = false
+		propertyHeader.Text = ""
+		propertyHeader.BackgroundColor3 = palette.card
+		propertyHeader.BorderSizePixel = 0
+		propertyHeader.Size = UDim2.new(1, 0, 0, 31)
+		propertyHeader.LayoutOrder = 4
+		propertyHeader.Parent = list
+		corner(propertyHeader, 4)
+		local propertyHeaderText = label(propertyHeader, "Auto Buy Property / Crate", 13, palette.text, true)
+		propertyHeaderText.Position = UDim2.fromOffset(10, 0)
+		propertyHeaderText.Size = UDim2.new(1, -40, 1, 0)
+		local propertyHeaderArrow = label(propertyHeader, "v", 14, rgb(210, 210, 216), true)
+		propertyHeaderArrow.Position = UDim2.new(1, -28, 0, 0)
+		propertyHeaderArrow.Size = UDim2.fromOffset(20, 31)
+		propertyHeaderArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local propertyAccent = Instance.new("Frame")
+		propertyAccent.BackgroundColor3 = palette.accent
+		propertyAccent.BorderSizePixel = 0
+		propertyAccent.Position = UDim2.new(0, 0, 1, -2)
+		propertyAccent.Size = UDim2.new(1, 0, 0, 2)
+		propertyAccent.Parent = propertyHeader
+
+		local propertyContent = Instance.new("Frame")
+		propertyContent.Name = "AutoBuyPropertyContent"
+		propertyContent.BackgroundTransparency = 1
+		propertyContent.BorderSizePixel = 0
+		propertyContent.ClipsDescendants = true
+		propertyContent.Size = UDim2.new(1, 0, 0, 0)
+		propertyContent.LayoutOrder = 5
+		propertyContent.Parent = list
+
+		local function makePropertyRow(titleText, descriptionText, y, height)
+			local row = Instance.new("Frame")
+			row.BackgroundColor3 = palette.card
+			row.BorderSizePixel = 0
+			row.Position = UDim2.fromOffset(0, y)
+			row.Size = UDim2.new(1, 0, 0, height)
+			row.Parent = propertyContent
+			corner(row, 4)
+			local rowTitle = label(row, titleText, 12, palette.text, true)
+			rowTitle.Position = UDim2.fromOffset(10, 4)
+			rowTitle.Size = UDim2.new(0.62, -10, 0, 18)
+			local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+			rowDescription.Position = UDim2.fromOffset(10, 21)
+			rowDescription.Size = UDim2.new(0.72, -10, 0, height - 24)
+			return row
+		end
+
+		local propertyRow = makePropertyRow("Property List", "Choose which props or crates to buy from restock.", 0, 58)
+		local propertyButton = Instance.new("TextButton")
+		propertyButton.Name = "ShopPropertyListButton"
+		propertyButton.AutoButtonColor = false
+		propertyButton.Font = Enum.Font.GothamBold
+		propertyButton.TextSize = 11
+		propertyButton.TextColor3 = palette.muted
+		propertyButton.TextXAlignment = Enum.TextXAlignment.Left
+		propertyButton.TextTruncate = Enum.TextTruncate.AtEnd
+		propertyButton.Text = "Select Options"
+		propertyButton.BackgroundColor3 = rgb(31, 26, 43)
+		propertyButton.BorderSizePixel = 0
+		propertyButton.Position = UDim2.new(0.62, 0, 0, 13)
+		propertyButton.Size = UDim2.new(0.38, -7, 0, 32)
+		propertyButton.Parent = propertyRow
+		corner(propertyButton, 4)
+		stroke(propertyButton, rgb(72, 48, 96), 0.45, 1)
+		padding(propertyButton, 10, 0, 30, 0)
+		local propertyArrow = label(propertyButton, "v", 13, rgb(210, 210, 216), true)
+		propertyArrow.Position = UDim2.new(1, -30, 0, 0)
+		propertyArrow.Size = UDim2.fromOffset(20, 32)
+		propertyArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+		local propertyPanel = Instance.new("Frame")
+		propertyPanel.Name = "ShopPropertyListDropdown"
+		propertyPanel.BackgroundColor3 = rgb(18, 18, 25)
+		propertyPanel.BorderSizePixel = 0
+		propertyPanel.ClipsDescendants = true
+		propertyPanel.Position = UDim2.new(0.62, 0, 0, 54)
+		propertyPanel.Size = UDim2.new(0.38, -7, 0, 0)
+		propertyPanel.ZIndex = 360
+		propertyPanel.Parent = propertyContent
+		corner(propertyPanel, 4)
+		stroke(propertyPanel, rgb(91, 39, 124), 0.1, 1)
+		local propertySearch = Instance.new("TextBox")
+		propertySearch.Name = "ShopPropertyListSearch"
+		propertySearch.ClearTextOnFocus = false
+		propertySearch.PlaceholderText = "Search"
+		propertySearch.Text = ""
+		propertySearch.Font = Enum.Font.GothamMedium
+		propertySearch.TextSize = 11
+		propertySearch.TextColor3 = palette.text
+		propertySearch.PlaceholderColor3 = palette.muted
+		propertySearch.BackgroundColor3 = rgb(35, 27, 48)
+		propertySearch.BorderSizePixel = 0
+		propertySearch.Position = UDim2.fromOffset(4, 4)
+		propertySearch.Size = UDim2.new(1, -8, 0, 26)
+		propertySearch.ZIndex = 361
+		propertySearch.Parent = propertyPanel
+		corner(propertySearch, 3)
+		local propertyOptions = Instance.new("ScrollingFrame")
+		propertyOptions.BackgroundTransparency = 1
+		propertyOptions.BorderSizePixel = 0
+		propertyOptions.CanvasSize = UDim2.fromOffset(0, 0)
+		propertyOptions.ScrollBarImageColor3 = palette.accent
+		propertyOptions.ScrollBarThickness = 3
+		propertyOptions.Position = UDim2.fromOffset(4, 34)
+		propertyOptions.Size = UDim2.new(1, -8, 1, -38)
+		propertyOptions.ZIndex = 361
+		propertyOptions.Parent = propertyPanel
+		local propertyOptionLayout = Instance.new("UIListLayout")
+		propertyOptionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		propertyOptionLayout.Padding = UDim.new(0, 2)
+		propertyOptionLayout.Parent = propertyOptions
+		local propertyOptionButtons = {}
+		local function refreshPropertySummary()
+			local names = selectedPropertyTargets()
+			propertyButton.Text = #names == 0 and "Select Options" or table.concat(names, ", ")
+			propertyButton.TextColor3 = #names == 0 and palette.muted or palette.text
+		end
+		local function updatePropertyCanvas()
+			propertyOptions.CanvasSize = UDim2.fromOffset(0, propertyOptionLayout.AbsoluteContentSize.Y)
+		end
+		for index, propertyName in ipairs(propertyNames) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = propertyName
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 11
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, -3, 0, 27)
+			option.LayoutOrder = index
+			option.ZIndex = 362
+			option.Parent = propertyOptions
+			corner(option, 3)
+			padding(option, 10, 0, 0, 0)
+			local function render()
+				local selected = state.selectedProps[propertyName] == true
+				option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+				option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+				option.BackgroundTransparency = selected and 0.1 or 0.35
+			end
+			render()
+			option.MouseButton1Click:Connect(function()
+				state.selectedProps[propertyName] = not state.selectedProps[propertyName] and true or nil
+				render()
+				refreshPropertySummary()
+			end)
+			table.insert(propertyOptionButtons, option)
+		end
+		refreshPropertySummary()
+		updatePropertyCanvas()
+		propertyOptionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatePropertyCanvas)
+		propertySearch:GetPropertyChangedSignal("Text"):Connect(function()
+			local query = string.lower(propertySearch.Text)
+			for _, option in ipairs(propertyOptionButtons) do
+				option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+			end
+			propertyOptions.CanvasPosition = Vector2.zero
+			updatePropertyCanvas()
+		end)
+
+		local propertyAmountRow = makePropertyRow("Props Buy Amount", "How many props to buy from each restock.", 64, 48)
+		local propertyAmountInput = Instance.new("TextBox")
+		propertyAmountInput.Name = "PropsBuyAmountInput"
+		propertyAmountInput.ClearTextOnFocus = false
+		propertyAmountInput.Text = tostring(state.propsBuyAmount)
+		propertyAmountInput.Font = Enum.Font.GothamBold
+		propertyAmountInput.TextSize = 11
+		propertyAmountInput.TextColor3 = palette.text
+		propertyAmountInput.TextXAlignment = Enum.TextXAlignment.Left
+		propertyAmountInput.BackgroundColor3 = rgb(31, 26, 43)
+		propertyAmountInput.BorderSizePixel = 0
+		propertyAmountInput.Position = UDim2.new(0.62, 0, 0, 8)
+		propertyAmountInput.Size = UDim2.new(0.38, -7, 0, 32)
+		propertyAmountInput.Parent = propertyAmountRow
+		corner(propertyAmountInput, 4)
+		stroke(propertyAmountInput, rgb(91, 39, 124), 0.25, 1)
+		padding(propertyAmountInput, 8, 0, 8, 0)
+		local function commitPropertyAmount()
+			state.propsBuyAmount = math.clamp(math.floor(tonumber(propertyAmountInput.Text) or 1), 1, 999)
+			propertyAmountInput.Text = tostring(state.propsBuyAmount)
+			screenGui:SetAttribute("PropsBuyAmount", state.propsBuyAmount)
+		end
+		propertyAmountInput.FocusLost:Connect(commitPropertyAmount)
+
+		local propertyToggleRefs = {}
+		local function makePropertyToggle(name, titleText, descriptionText, y, key)
+			local row = makePropertyRow(titleText, descriptionText, y, 48)
+			local toggle = Instance.new("TextButton")
+			toggle.Name = name
+			toggle.AutoButtonColor = false
+			toggle.Text = ""
+			toggle.BorderSizePixel = 0
+			toggle.Position = UDim2.new(1, -50, 0.5, -11)
+			toggle.Size = UDim2.fromOffset(38, 22)
+			toggle.Parent = row
+			corner(toggle, 11)
+			stroke(toggle, rgb(116, 70, 152), 0.45, 1)
+			local knob = Instance.new("Frame")
+			knob.BackgroundColor3 = rgb(239, 239, 243)
+			knob.BorderSizePixel = 0
+			knob.Size = UDim2.fromOffset(16, 16)
+			knob.Parent = toggle
+			corner(knob, 8)
+			local function render()
+				local enabled = state[key]
+				TweenService:Create(toggle, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					BackgroundColor3 = enabled and palette.accent or rgb(48, 46, 58),
+				}):Play()
+				TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+					Position = enabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+				}):Play()
+			end
+			propertyToggleRefs[key] = {render = render}
+			toggle.MouseButton1Click:Connect(function()
+				commitPropertyAmount()
+				state[key] = not state[key]
+				if state[key] then
+					local otherKey = key == "propsLimitedEnabled" and "propsAlwaysEnabled" or "propsLimitedEnabled"
+					state[otherKey] = false
+				end
+				for _, ref in pairs(propertyToggleRefs) do ref.render() end
+				screenGui:SetAttribute("BuyPropsIfRestockEnabled", state.propsLimitedEnabled)
+				screenGui:SetAttribute("AlwaysBuyPropsIfRestockEnabled", state.propsAlwaysEnabled)
+				if state.propsLimitedEnabled or state.propsAlwaysEnabled then
+					state.propsRestockId = nil
+					ensurePropertyLoop()
+				else
+					state.propsRunId += 1
+					screenGui:SetAttribute("AutoBuyPropertyStatus", "Stopped")
+				end
+			end)
+			render()
+		end
+
+		makePropertyToggle("AlwaysBuyPropsIfRestockToggle", "Always Buy Props If Restock", "Buys all available props stock while you can afford it.", 118, "propsAlwaysEnabled")
+
+		local categoryOpen = false
+		local propertyDropdownOpen = false
+		propertyButton.MouseButton1Click:Connect(function()
+			propertyDropdownOpen = not propertyDropdownOpen
+			propertyPanel.Size = UDim2.new(0.38, -7, 0, propertyDropdownOpen and 160 or 0)
+			propertyArrow.Rotation = propertyDropdownOpen and 180 or 0
+		end)
+		propertyHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then
+				propertyDropdownOpen = false
+				propertyPanel.Size = UDim2.new(0.38, -7, 0, 0)
+				propertyArrow.Rotation = 0
+			end
+			TweenService:Create(propertyContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 166 or 0),
+			}):Play()
+			TweenService:Create(propertyHeaderArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("PropsBuyAmount", state.propsBuyAmount)
+		screenGui:SetAttribute("BuyPropsIfRestockEnabled", state.propsLimitedEnabled)
+		screenGui:SetAttribute("AlwaysBuyPropsIfRestockEnabled", state.propsAlwaysEnabled)
+		screenGui:SetAttribute("AutoBuyPropertyStatus", "Stopped")
+	end
+	createPropertySection()
+
+	local function createAuctionSection()
+		local auctioneer = require(ReplicatedStorage.SharedModules:WaitForChild("Auctioneer"))
+		local auctionChoices = {Seeds = {}, Gear = {}, SeedPacks = {}, Eggs = {}}
+		for _, name in ipairs(shopSeeds) do table.insert(auctionChoices.Seeds, name) end
+		for _, entry in ipairs(require(ReplicatedStorage.SharedModules:WaitForChild("GearShopData")).Data) do
+			local name = entry.Name or entry.GearName or entry.ItemName
+			if type(name) == "string" then table.insert(auctionChoices.Gear, name) end
+		end
+		for key, entry in pairs(require(ReplicatedStorage.SharedModules:WaitForChild("SeedPackData")).Data or {}) do
+			local name = type(entry) == "table" and (entry.PackName or entry.SeedPackName or entry.Name) or nil
+			if type(name) ~= "string" and type(key) == "string" then name = key end
+			if type(name) == "string" then table.insert(auctionChoices.SeedPacks, name) end
+		end
+		for key, entry in pairs(require(ReplicatedStorage.SharedModules:WaitForChild("EggData")).Data or {}) do
+			local name = type(entry) == "table" and (entry.EggName or entry.Name) or nil
+			if type(name) ~= "string" and type(key) == "string" then name = key end
+			if type(name) == "string" and name ~= "Test Egg" then table.insert(auctionChoices.Eggs, name) end
+		end
+		for _, choices in pairs(auctionChoices) do table.sort(choices) end
+
+		local pendingResults = {}
+		local retryAt = {}
+		if runtime.YupisotesAuctionResultConnection then runtime.YupisotesAuctionResultConnection:Disconnect() end
+		runtime.YupisotesAuctionResultConnection = networking.Auctioneer.PurchaseResult.OnClientEvent:Connect(function(lotId, success, message)
+			pendingResults[lotId] = {success = success == true, message = tostring(message or "")}
+		end)
+
+		local function requestSnapshot()
+			local ok, snapshot = pcall(function()
+				return networking.Auctioneer.RequestSnapshot:Fire()
+			end)
+			if ok and type(snapshot) == "table" then return snapshot end
+			-- Once the game controller has consumed the remote response, some servers
+			-- return nil here. Reuse the controller's current lot and stock snapshot.
+			local event = networking.Auctioneer.Snapshot.OnClientEvent
+			local node = type(event) == "table" and event.Next or nil
+			for _ = 1, 12 do
+				if type(node) ~= "table" or node == event then break end
+				local callback = node.Function
+				if type(callback) == "function" then
+					local upvalues = debug.getupvalues(callback)
+					local lots = upvalues[1]
+					if type(lots) == "table" and type(lots[1]) == "table" and type(lots[1].lotId) == "string" then
+						return {
+							manifest = {lots = lots, rollWindowUnix = upvalues[4]},
+							stock = type(upvalues[2]) == "table" and upvalues[2] or {},
+							rollWindowUnix = upvalues[4],
+						}
+					end
+				end
+				node = node.Next
+			end
+			return nil
+		end
+
+		local function selectedLotKey(lot)
+			if type(lot) ~= "table" or type(lot.item) ~= "string" then return nil end
+			for _, category in ipairs({"Seeds", "Gear", "SeedPacks", "Eggs"}) do
+				if state.auctionSelections[category][lot.item] then return category .. "|" .. lot.item end
+			end
+			return nil
+		end
+
+		local function selectedAuctionCount()
+			local count = 0
+			for _, selected in pairs(state.auctionSelections) do
+				for _, enabled in pairs(selected) do if enabled then count += 1 end end
+			end
+			return count
+		end
+
+		local function ensureAuctionLoop()
+			state.auctionRunId += 1
+			local runId = state.auctionRunId
+			local generation = autoPlantGeneration
+			task.spawn(function()
+				while state.auctionEnabled and state.auctionRunId == runId
+					and runtime.YupisotesGeneration == generation and screenGui.Parent do
+					if selectedAuctionCount() == 0 then
+						screenGui:SetAttribute("AutoBuyAuctionStatus", "Select at least one item")
+						task.wait(0.6)
+						continue
+					end
+					local snapshot = requestSnapshot()
+					local manifest = snapshot and snapshot.manifest
+					local lots = manifest and manifest.lots
+					if type(lots) ~= "table" then
+						screenGui:SetAttribute("AutoBuyAuctionStatus", "Auction unavailable")
+						task.wait(1)
+						continue
+					end
+					local cycleId = snapshot.rollWindowUnix or manifest.rollWindowUnix
+					if cycleId ~= nil and state.auctionCycleId ~= cycleId then
+						state.auctionCycleId = cycleId
+						state.auctionBought = {}
+						retryAt = {}
+					end
+					local now = workspace:GetServerTimeNow()
+					local matched = false
+					for _, lot in ipairs(lots) do
+						if not state.auctionEnabled or state.auctionRunId ~= runId then break end
+						local key = selectedLotKey(lot)
+						local stock = snapshot.stock and snapshot.stock[lot.lotId]
+						if type(stock) ~= "number" then stock = lot.stockQuantity end
+						local active = type(lot.lotId) == "string" and lot.robuxPrice == nil
+							and type(lot.expiresAt) == "number" and lot.expiresAt > now
+							and (stock == nil or stock > 0)
+						if key and active then
+							local currentPrice = auctioneer.CurrentPrice(lot, now)
+							local priceMatches = (state.auctionPriceMode == "Above" and currentPrice >= state.auctionPriceLimit)
+								or (state.auctionPriceMode == "Below" and currentPrice <= state.auctionPriceLimit)
+							local bought = state.auctionBought[key] or 0
+							if priceMatches and bought < state.auctionBuyLotCount and os.clock() >= (retryAt[lot.lotId] or 0) then
+								matched = true
+								local leaderstats = player:FindFirstChild("leaderstats")
+								local sheckles = leaderstats and leaderstats:FindFirstChild("Sheckles")
+								local balanceBefore = sheckles and sheckles.Value
+								pendingResults[lot.lotId] = "pending"
+								local ok = pcall(function()
+									networking.Auctioneer.PurchaseLot:Fire(lot.lotId, currentPrice)
+								end)
+								local deadline = os.clock() + 2
+								while pendingResults[lot.lotId] == "pending" and os.clock() < deadline do task.wait(0.05) end
+								local result = pendingResults[lot.lotId]
+								pendingResults[lot.lotId] = nil
+								local purchased = ok and ((type(result) == "table" and result.success)
+									or (sheckles and sheckles.Value < balanceBefore))
+								retryAt[lot.lotId] = os.clock() + (purchased and 10 or 2)
+								if purchased then
+									state.auctionBought[key] = bought + 1
+									screenGui:SetAttribute("LastAutoBoughtAuctionItem", lot.item)
+									screenGui:SetAttribute("AutoBuyAuctionStatus", "Bought " .. lot.item)
+								else
+									local message = type(result) == "table" and result.message or "No confirmation"
+									screenGui:SetAttribute("AutoBuyAuctionStatus", "Retrying: " .. message)
+								end
+							end
+						end
+					end
+					if not matched then screenGui:SetAttribute("AutoBuyAuctionStatus", "Waiting for matching lot") end
+					task.wait(0.6)
+				end
+			end)
+		end
+
+		local auctionHeader = Instance.new("TextButton")
+		auctionHeader.Name = "ShopAuctionHeader"
+		auctionHeader.AutoButtonColor = false
+		auctionHeader.Text = ""
+		auctionHeader.BackgroundColor3 = palette.card
+		auctionHeader.BorderSizePixel = 0
+		auctionHeader.Size = UDim2.new(1, 0, 0, 31)
+		auctionHeader.LayoutOrder = 6
+		auctionHeader.Parent = list
+		corner(auctionHeader, 4)
+		local auctionHeaderText = label(auctionHeader, "Shop Auction", 13, palette.text, true)
+		auctionHeaderText.Position = UDim2.fromOffset(10, 0)
+		auctionHeaderText.Size = UDim2.new(1, -40, 1, 0)
+		local auctionHeaderArrow = label(auctionHeader, "v", 14, rgb(210, 210, 216), true)
+		auctionHeaderArrow.Position = UDim2.new(1, -28, 0, 0)
+		auctionHeaderArrow.Size = UDim2.fromOffset(20, 31)
+		auctionHeaderArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local auctionAccent = Instance.new("Frame")
+		auctionAccent.BackgroundColor3 = palette.accent
+		auctionAccent.BorderSizePixel = 0
+		auctionAccent.Position = UDim2.new(0, 0, 1, -2)
+		auctionAccent.Size = UDim2.new(1, 0, 0, 2)
+		auctionAccent.Parent = auctionHeader
+
+		local auctionContent = Instance.new("Frame")
+		auctionContent.Name = "ShopAuctionContent"
+		auctionContent.BackgroundTransparency = 1
+		auctionContent.BorderSizePixel = 0
+		auctionContent.ClipsDescendants = true
+		auctionContent.Size = UDim2.new(1, 0, 0, 0)
+		auctionContent.LayoutOrder = 7
+		auctionContent.Parent = list
+		local openDropdown
+
+		local function makeAuctionRow(titleText, y, height)
+			local row = Instance.new("Frame")
+			row.BackgroundColor3 = palette.card
+			row.BorderSizePixel = 0
+			row.Position = UDim2.fromOffset(0, y)
+			row.Size = UDim2.new(1, 0, 0, height)
+			row.Parent = auctionContent
+			corner(row, 4)
+			local rowTitle = label(row, titleText, 12, palette.text, true)
+			rowTitle.Position = UDim2.fromOffset(10, 0)
+			rowTitle.Size = UDim2.new(0.62, -10, 1, 0)
+			return row, rowTitle
+		end
+
+		local function makeAuctionSelect(category, titleText, y, zIndex)
+			local row = makeAuctionRow(titleText, y, 40)
+			local button = Instance.new("TextButton")
+			button.Name = "Auction" .. category .. "Button"
+			button.AutoButtonColor = false
+			button.Font = Enum.Font.GothamBold
+			button.TextSize = 11
+			button.TextColor3 = palette.muted
+			button.TextXAlignment = Enum.TextXAlignment.Left
+			button.TextTruncate = Enum.TextTruncate.AtEnd
+			button.BackgroundColor3 = rgb(31, 26, 43)
+			button.BorderSizePixel = 0
+			button.Position = UDim2.new(0.62, 0, 0, 4)
+			button.Size = UDim2.new(0.38, -7, 0, 32)
+			button.Parent = row
+			corner(button, 4)
+			stroke(button, rgb(72, 48, 96), 0.45, 1)
+			padding(button, 10, 0, 30, 0)
+			local arrow = label(button, "v", 13, rgb(210, 210, 216), true)
+			arrow.Position = UDim2.new(1, -30, 0, 0)
+			arrow.Size = UDim2.fromOffset(20, 32)
+			arrow.TextXAlignment = Enum.TextXAlignment.Center
+			local panel = Instance.new("Frame")
+			panel.Name = "Auction" .. category .. "Dropdown"
+			panel.BackgroundColor3 = rgb(18, 18, 25)
+			panel.BorderSizePixel = 0
+			panel.ClipsDescendants = true
+			panel.Position = UDim2.new(0.62, 0, 0, y + 38)
+			panel.Size = UDim2.new(0.38, -7, 0, 0)
+			panel.ZIndex = zIndex
+			panel.Parent = auctionContent
+			corner(panel, 4)
+			stroke(panel, rgb(91, 39, 124), 0.1, 1)
+			local search = Instance.new("TextBox")
+			search.ClearTextOnFocus = false
+			search.PlaceholderText = "Search"
+			search.Text = ""
+			search.Font = Enum.Font.GothamMedium
+			search.TextSize = 11
+			search.TextColor3 = palette.text
+			search.PlaceholderColor3 = palette.muted
+			search.BackgroundColor3 = rgb(35, 27, 48)
+			search.BorderSizePixel = 0
+			search.Position = UDim2.fromOffset(4, 4)
+			search.Size = UDim2.new(1, -8, 0, 26)
+			search.ZIndex = zIndex + 1
+			search.Parent = panel
+			corner(search, 3)
+			local options = Instance.new("ScrollingFrame")
+			options.BackgroundTransparency = 1
+			options.BorderSizePixel = 0
+			options.CanvasSize = UDim2.fromOffset(0, 0)
+			options.ScrollBarImageColor3 = palette.accent
+			options.ScrollBarThickness = 3
+			options.Position = UDim2.fromOffset(4, 34)
+			options.Size = UDim2.new(1, -8, 1, -38)
+			options.ZIndex = zIndex + 1
+			options.Parent = panel
+			local layout = Instance.new("UIListLayout")
+			layout.SortOrder = Enum.SortOrder.LayoutOrder
+			layout.Padding = UDim.new(0, 2)
+			layout.Parent = options
+			local optionButtons = {}
+			local function refresh()
+				local names = {}
+				for _, name in ipairs(auctionChoices[category]) do
+					if state.auctionSelections[category][name] then table.insert(names, name) end
+				end
+				button.Text = #names == 0 and "Select Options" or table.concat(names, ", ")
+				button.TextColor3 = #names == 0 and palette.muted or palette.text
+			end
+			for index, name in ipairs(auctionChoices[category]) do
+				local option = Instance.new("TextButton")
+				option.AutoButtonColor = false
+				option.Text = name
+				option.Font = Enum.Font.GothamMedium
+				option.TextSize = 11
+				option.TextXAlignment = Enum.TextXAlignment.Left
+				option.BorderSizePixel = 0
+				option.Size = UDim2.new(1, -3, 0, 27)
+				option.LayoutOrder = index
+				option.ZIndex = zIndex + 2
+				option.Parent = options
+				corner(option, 3)
+				padding(option, 10, 0, 0, 0)
+				local function render()
+					local selected = state.auctionSelections[category][name] == true
+					option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+					option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+					option.BackgroundTransparency = selected and 0.1 or 0.35
+				end
+				render()
+				option.MouseButton1Click:Connect(function()
+					state.auctionSelections[category][name] = not state.auctionSelections[category][name] and true or nil
+					render()
+					refresh()
+				end)
+				table.insert(optionButtons, option)
+			end
+			local function updateCanvas() options.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y) end
+			layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+			search:GetPropertyChangedSignal("Text"):Connect(function()
+				local query = string.lower(search.Text)
+				for _, option in ipairs(optionButtons) do
+					option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+				end
+				options.CanvasPosition = Vector2.zero
+				updateCanvas()
+			end)
+			button.MouseButton1Click:Connect(function()
+				if openDropdown and openDropdown.panel ~= panel then
+					openDropdown.panel.Size = UDim2.new(0.38, -7, 0, 0)
+					openDropdown.arrow.Rotation = 0
+				end
+				local opening = panel.Size.Y.Offset == 0
+				panel.Size = UDim2.new(0.38, -7, 0, opening and 160 or 0)
+				arrow.Rotation = opening and 180 or 0
+				openDropdown = opening and {panel = panel, arrow = arrow} or nil
+			end)
+			refresh()
+			updateCanvas()
+		end
+
+		makeAuctionSelect("Seeds", "Seeds", 0, 430)
+		makeAuctionSelect("Gear", "Gear", 46, 420)
+		makeAuctionSelect("SeedPacks", "Seed Packs", 92, 410)
+		makeAuctionSelect("Eggs", "Eggs", 138, 400)
+
+		local priceModeRow = makeAuctionRow("Price Mode", 184, 40)
+		local priceModeButton = Instance.new("TextButton")
+		priceModeButton.Name = "AuctionPriceModeButton"
+		priceModeButton.AutoButtonColor = false
+		priceModeButton.Font = Enum.Font.GothamBold
+		priceModeButton.TextSize = 11
+		priceModeButton.TextColor3 = palette.text
+		priceModeButton.TextXAlignment = Enum.TextXAlignment.Left
+		priceModeButton.Text = state.auctionPriceMode
+		priceModeButton.BackgroundColor3 = rgb(31, 26, 43)
+		priceModeButton.BorderSizePixel = 0
+		priceModeButton.Position = UDim2.new(0.62, 0, 0, 4)
+		priceModeButton.Size = UDim2.new(0.38, -7, 0, 32)
+		priceModeButton.Parent = priceModeRow
+		corner(priceModeButton, 4)
+		stroke(priceModeButton, rgb(72, 48, 96), 0.45, 1)
+		padding(priceModeButton, 10, 0, 30, 0)
+		local priceModeArrow = label(priceModeButton, "v", 13, rgb(210, 210, 216), true)
+		priceModeArrow.Position = UDim2.new(1, -30, 0, 0)
+		priceModeArrow.Size = UDim2.fromOffset(20, 32)
+		priceModeArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local priceModePanel = Instance.new("Frame")
+		priceModePanel.Name = "AuctionPriceModeDropdown"
+		priceModePanel.BackgroundColor3 = rgb(18, 18, 25)
+		priceModePanel.BorderSizePixel = 0
+		priceModePanel.ClipsDescendants = true
+		priceModePanel.Position = UDim2.new(0.62, 0, 0, 222)
+		priceModePanel.Size = UDim2.new(0.38, -7, 0, 0)
+		priceModePanel.ZIndex = 390
+		priceModePanel.Parent = auctionContent
+		corner(priceModePanel, 4)
+		stroke(priceModePanel, rgb(91, 39, 124), 0.1, 1)
+		local priceModeOptions = {}
+		local function renderPriceModes()
+			for mode, option in pairs(priceModeOptions) do
+				local selected = state.auctionPriceMode == mode
+				option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+				option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+				option.BackgroundTransparency = selected and 0.1 or 0.35
+			end
+		end
+		for index, mode in ipairs({"Below", "Above"}) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = mode
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 11
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BorderSizePixel = 0
+			option.Position = UDim2.fromOffset(4, 4 + ((index - 1) * 29))
+			option.Size = UDim2.new(1, -8, 0, 27)
+			option.ZIndex = 391
+			option.Parent = priceModePanel
+			corner(option, 3)
+			padding(option, 10, 0, 0, 0)
+			priceModeOptions[mode] = option
+			option.MouseButton1Click:Connect(function()
+				state.auctionPriceMode = mode
+				priceModeButton.Text = mode
+				screenGui:SetAttribute("AuctionPriceMode", mode)
+				renderPriceModes()
+				priceModePanel.Size = UDim2.new(0.38, -7, 0, 0)
+				priceModeArrow.Rotation = 0
+				openDropdown = nil
+			end)
+		end
+		renderPriceModes()
+		priceModeButton.MouseButton1Click:Connect(function()
+			if openDropdown and openDropdown.panel ~= priceModePanel then
+				openDropdown.panel.Size = UDim2.new(0.38, -7, 0, 0)
+				openDropdown.arrow.Rotation = 0
+			end
+			local opening = priceModePanel.Size.Y.Offset == 0
+			priceModePanel.Size = UDim2.new(0.38, -7, 0, opening and 64 or 0)
+			priceModeArrow.Rotation = opening and 180 or 0
+			openDropdown = opening and {panel = priceModePanel, arrow = priceModeArrow} or nil
+		end)
+
+		local function makeAuctionInput(name, titleText, descriptionText, y, value, commit)
+			local row, rowTitle = makeAuctionRow(titleText, y, 58)
+			rowTitle.Size = UDim2.new(0.62, -10, 0, 19)
+			local description = label(row, descriptionText, 10, palette.muted, false)
+			description.Position = UDim2.fromOffset(10, 21)
+			description.Size = UDim2.new(0.62, -10, 0, 32)
+			local input = Instance.new("TextBox")
+			input.Name = name
+			input.ClearTextOnFocus = false
+			input.Text = tostring(value)
+			input.Font = Enum.Font.GothamBold
+			input.TextSize = 11
+			input.TextColor3 = palette.text
+			input.TextXAlignment = Enum.TextXAlignment.Left
+			input.BackgroundColor3 = rgb(31, 26, 43)
+			input.BorderSizePixel = 0
+			input.Position = UDim2.new(0.62, 0, 0, 8)
+			input.Size = UDim2.new(0.38, -7, 0, 32)
+			input.Parent = row
+			corner(input, 4)
+			stroke(input, rgb(91, 39, 124), 0.25, 1)
+			padding(input, 8, 0, 8, 0)
+			input.FocusLost:Connect(function() input.Text = tostring(commit(input.Text)) end)
+			return input
+		end
+		local priceLimitInput = makeAuctionInput("AuctionPriceLimitInput", "Price Limit", "Maximum or minimum price accepted by Price Mode.", 230, state.auctionPriceLimit, function(text)
+			state.auctionPriceLimit = math.max(0, math.floor(tonumber(text) or 0))
+			screenGui:SetAttribute("AuctionPriceLimit", state.auctionPriceLimit)
+			return state.auctionPriceLimit
+		end)
+		local buyLotInput = makeAuctionInput("AuctionBuyLotCountInput", "Buy Lot Count", "How many times to buy each selected item per restock cycle.", 294, state.auctionBuyLotCount, function(text)
+			state.auctionBuyLotCount = math.clamp(math.floor(tonumber(text) or 1), 1, 999)
+			screenGui:SetAttribute("AuctionBuyLotCount", state.auctionBuyLotCount)
+			return state.auctionBuyLotCount
+		end)
+
+		local refreshButton = Instance.new("TextButton")
+		refreshButton.Name = "AuctionRefreshOptionsButton"
+		refreshButton.AutoButtonColor = true
+		refreshButton.Text = "Refresh Options"
+		refreshButton.Font = Enum.Font.GothamBold
+		refreshButton.TextSize = 11
+		refreshButton.TextColor3 = palette.text
+		refreshButton.BackgroundColor3 = rgb(31, 30, 29)
+		refreshButton.BorderSizePixel = 0
+		refreshButton.Position = UDim2.fromOffset(0, 358)
+		refreshButton.Size = UDim2.new(1, 0, 0, 34)
+		refreshButton.Parent = auctionContent
+		corner(refreshButton, 4)
+		refreshButton.MouseButton1Click:Connect(function()
+			state.auctionRefreshId += 1
+			local snapshot = requestSnapshot()
+			local lots = snapshot and snapshot.manifest and snapshot.manifest.lots
+			screenGui:SetAttribute("AutoBuyAuctionStatus", type(lots) == "table" and ("Refreshed " .. #lots .. " lots") or "Auction unavailable")
+		end)
+
+		local toggleRow = makeAuctionRow("Start Auto Buy Auction", 398, 48)
+		local toggle = Instance.new("TextButton")
+		toggle.Name = "StartAutoBuyAuctionToggle"
+		toggle.AutoButtonColor = false
+		toggle.Text = ""
+		toggle.BorderSizePixel = 0
+		toggle.Position = UDim2.new(1, -50, 0.5, -11)
+		toggle.Size = UDim2.fromOffset(38, 22)
+		toggle.Parent = toggleRow
+		corner(toggle, 11)
+		stroke(toggle, rgb(116, 70, 152), 0.45, 1)
+		local knob = Instance.new("Frame")
+		knob.BackgroundColor3 = rgb(239, 239, 243)
+		knob.BorderSizePixel = 0
+		knob.Size = UDim2.fromOffset(16, 16)
+		knob.Parent = toggle
+		corner(knob, 8)
+		local function renderToggle()
+			TweenService:Create(toggle, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				BackgroundColor3 = state.auctionEnabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = state.auctionEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+		end
+		toggle.MouseButton1Click:Connect(function()
+			priceLimitInput:ReleaseFocus()
+			buyLotInput:ReleaseFocus()
+			state.auctionEnabled = not state.auctionEnabled
+			screenGui:SetAttribute("StartAutoBuyAuctionEnabled", state.auctionEnabled)
+			renderToggle()
+			if state.auctionEnabled then
+				ensureAuctionLoop()
+			else
+				state.auctionRunId += 1
+				screenGui:SetAttribute("AutoBuyAuctionStatus", "Stopped")
+			end
+		end)
+		renderToggle()
+
+		local categoryOpen = false
+		auctionHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen and openDropdown then
+				openDropdown.panel.Size = UDim2.new(0.38, -7, 0, 0)
+				openDropdown.arrow.Rotation = 0
+				openDropdown = nil
+			end
+			TweenService:Create(auctionContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 446 or 0),
+			}):Play()
+			TweenService:Create(auctionHeaderArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("AuctionPriceMode", state.auctionPriceMode)
+		screenGui:SetAttribute("AuctionPriceLimit", state.auctionPriceLimit)
+		screenGui:SetAttribute("AuctionBuyLotCount", state.auctionBuyLotCount)
+		screenGui:SetAttribute("StartAutoBuyAuctionEnabled", state.auctionEnabled)
+		screenGui:SetAttribute("AutoBuyAuctionStatus", "Stopped")
+	end
+	createAuctionSection()
+end
 for tabName, ref in pairs(tabRefs) do
 ref.button.MouseButton1Click:Connect(function()
 if tabName == "Info" then
 showInfo()
 elseif tabName == "Farm" then
 showFarm()
+	elseif tabName == "Shop" then
+		runtime.YupisotesShowShop()
 end
 end)
 end
