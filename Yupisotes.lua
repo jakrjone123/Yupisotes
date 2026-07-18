@@ -540,6 +540,9 @@ runtime.YupisotesShopState = {
 	auctionBought = {},
 	auctionRefreshId = 0,
 }
+if runtime.YupisotesWildPetCategoryOpen == nil then
+	runtime.YupisotesWildPetCategoryOpen = true
+end
 runtime.YupisotesPetState = {
 	categoryOpen = true,
 	selectedNames = {},
@@ -8380,6 +8383,7 @@ runtime.YupisotesShowPet = function()
 	list.CanvasPosition = Vector2.zero
 
 	local state = runtime.YupisotesPetState
+	state.categoryOpen = runtime.YupisotesWildPetCategoryOpen ~= false
 	local petData = require(ReplicatedStorage:WaitForChild("SharedData"):WaitForChild("PetData"))
 	local petNames = {}
 	local displayToKey = {}
@@ -8720,6 +8724,7 @@ runtime.YupisotesShowPet = function()
 
 	header.MouseButton1Click:Connect(function()
 		state.categoryOpen = not state.categoryOpen
+		runtime.YupisotesWildPetCategoryOpen = state.categoryOpen
 		if state.categoryOpen then
 			petContent.Visible = true
 			petContent.Size = UDim2.new(1, 0, 0, 0)
