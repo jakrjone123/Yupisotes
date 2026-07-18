@@ -114,34 +114,28 @@ main.AnchorPoint = Vector2.new(0.5, 0.5)
 main.Position = UDim2.fromScale(0.5, 0.5)
 main.Size = UDim2.fromOffset(580, 380)
 main.BackgroundColor3 = palette.bg
-main.BackgroundTransparency = 0.06
+main.BackgroundTransparency = 0.03
 main.BorderSizePixel = 0
 main.ClipsDescendants = true
 main.Parent = screenGui
-corner(main, 4)
-stroke(main, palette.stroke2, 0.2, 1)
-
-local fade = Instance.new("UIGradient")
-fade.Rotation = 0
-fade.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, rgb(9, 8, 12)),
-	ColorSequenceKeypoint.new(0.55, rgb(3, 10, 7)),
-	ColorSequenceKeypoint.new(1, rgb(3, 7, 6)),
-})
-fade.Transparency = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0),
-	NumberSequenceKeypoint.new(0.55, 0.08),
-	NumberSequenceKeypoint.new(1, 0.15),
-})
-fade.Parent = main
+corner(main, 12)
 
 local top = Instance.new("Frame")
 top.Name = "TopBar"
 top.BackgroundColor3 = rgb(3, 6, 5)
-top.BackgroundTransparency = 0.18
+top.BackgroundTransparency = 0.05
 top.BorderSizePixel = 0
 top.Size = UDim2.new(1, 0, 0, 44)
 top.Parent = main
+corner(top, 12)
+
+local topBottomFill = Instance.new("Frame")
+topBottomFill.BackgroundColor3 = top.BackgroundColor3
+topBottomFill.BackgroundTransparency = top.BackgroundTransparency
+topBottomFill.BorderSizePixel = 0
+topBottomFill.Position = UDim2.new(0, 0, 1, -12)
+topBottomFill.Size = UDim2.new(1, 0, 0, 12)
+topBottomFill.Parent = top
 
 local topLine = Instance.new("Frame")
 topLine.BackgroundColor3 = palette.accent2
@@ -178,6 +172,8 @@ minimize.Text = "-"
 minimize.Font = Enum.Font.GothamBold
 minimize.TextSize = 18
 minimize.TextColor3 = palette.text
+minimize.BackgroundColor3 = rgb(27, 30, 34)
+minimize.BackgroundTransparency = 1
 minimize.Position = UDim2.new(1, -58, 0, 9)
 minimize.Size = UDim2.fromOffset(24, 24)
 minimize.Parent = top
@@ -188,9 +184,25 @@ close.Text = "X"
 close.Font = Enum.Font.GothamBold
 close.TextSize = 15
 close.TextColor3 = palette.text
+close.BackgroundColor3 = rgb(106, 35, 53)
+close.BackgroundTransparency = 1
 close.Position = UDim2.new(1, -30, 0, 9)
 close.Size = UDim2.fromOffset(24, 24)
 close.Parent = top
+corner(minimize, 4)
+corner(close, 4)
+minimize.MouseEnter:Connect(function()
+	TweenService:Create(minimize, TweenInfo.new(0.12), {BackgroundTransparency = 0.25}):Play()
+end)
+minimize.MouseLeave:Connect(function()
+	TweenService:Create(minimize, TweenInfo.new(0.12), {BackgroundTransparency = 1}):Play()
+end)
+close.MouseEnter:Connect(function()
+	TweenService:Create(close, TweenInfo.new(0.12), {BackgroundTransparency = 0.12}):Play()
+end)
+close.MouseLeave:Connect(function()
+	TweenService:Create(close, TweenInfo.new(0.12), {BackgroundTransparency = 1}):Play()
+end)
 close.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
@@ -205,6 +217,14 @@ local sidebar = Instance.new("Frame")
 sidebar.BackgroundTransparency = 1
 sidebar.Size = UDim2.fromOffset(134, 312)
 sidebar.Parent = body
+
+local sidebarDivider = Instance.new("Frame")
+sidebarDivider.BackgroundColor3 = rgb(62, 48, 72)
+sidebarDivider.BackgroundTransparency = 0.58
+sidebarDivider.BorderSizePixel = 0
+sidebarDivider.Position = UDim2.new(1, -1, 0, 2)
+sidebarDivider.Size = UDim2.new(0, 1, 1, -4)
+sidebarDivider.Parent = sidebar
 
 local search = Instance.new("Frame")
 search.BackgroundColor3 = rgb(18, 19, 28)
@@ -305,8 +325,16 @@ content.Size = UDim2.new(1, -146, 1, 0)
 content.Parent = body
 
 local title = label(content, "Info", 22, palette.text, true)
-title.Position = UDim2.fromOffset(0, 1)
-title.Size = UDim2.new(1, 0, 0, 30)
+title.Position = UDim2.fromOffset(11, 1)
+title.Size = UDim2.new(1, -11, 0, 30)
+
+local titleMarker = Instance.new("Frame")
+titleMarker.BackgroundColor3 = palette.accent
+titleMarker.BorderSizePixel = 0
+titleMarker.Position = UDim2.fromOffset(0, 7)
+titleMarker.Size = UDim2.fromOffset(4, 17)
+titleMarker.Parent = content
+corner(titleMarker, 2)
 
 local section = Instance.new("TextButton")
 section.Name = "AutoPlantHeader"
@@ -404,7 +432,7 @@ end
 
 local currentPage = "Info"
 local selectedPlant = "All Seeds"
-local selectedRarity = "None"
+local selectedPlantRarities = {}
 local selectedMethod = "Center Position"
 local plantSpeed = 0
 local autoPlantEnabled = false
@@ -450,6 +478,30 @@ local shovelFruitKgDirection = "Up"
 local autoShovelFruitEnabled = false
 local autoShovelFruitRunId = 0
 local shovelFruitPending = {}
+
+local selectedTrowelPlants = {}
+local selectedTrowelRarities = {}
+local trowelPositionMode = "Random Plot Position"
+local savedTrowelPosition = nil
+local trowelDelay = 1
+local autoTrowelEnabled = false
+local autoTrowelRunId = 0
+local trowelPending = {}
+local collectedSeedSelection = "Server"
+local collectedSeedDelay = 0.5
+local autoCollectDroppedSeedEnabled = false
+local autoCollectDroppedSeedRunId = 0
+local droppedSeedPending = {}
+local selectedSellPetNames = {}
+local selectedSellPetRarities = {}
+local blacklistedPetVariants = {Big = true, Huge = true, Rainbow = true, Mega = true}
+local sellPetDelay = 0.5
+local autoSellPetEnabled = false
+local autoSellPetRunId = 0
+local sellPetPending = {}
+local selectedLeaveWeathers = {}
+local autoLeaveWeatherEnabled = false
+local autoLeaveWeatherRunId = 0
 local dailyDealMode = "Full Inventory"
 local dailyDealCount = 100
 local useDailyDeal = false
@@ -597,6 +649,7 @@ local harvestMutationOptions = {
 }
 
 local networking = require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Networking"))
+local petData = require(ReplicatedStorage:WaitForChild("SharedData"):WaitForChild("PetData"))
 local seedData = require(ReplicatedStorage.SharedModules:WaitForChild("SeedData"))
 local seedRarities = {}
 for _, data in pairs(seedData) do
@@ -639,9 +692,9 @@ local function getMatchingSeedTools()
 			local seedName = item:GetAttribute("SeedTool")
 			local count = item:GetAttribute("Count")
 			if seedName and (not count or count > 0) then
-				local matches = selectedRarity ~= "None"
-					and seedRarities[seedName] == selectedRarity
-					or selectedRarity == "None" and (selectedPlant == "All Seeds" or seedName == selectedPlant)
+				local hasRarityFilter = next(selectedPlantRarities) ~= nil
+				local matches = hasRarityFilter and selectedPlantRarities[seedRarities[seedName]] == true
+					or not hasRarityFilter and (selectedPlant == "All Seeds" or seedName == selectedPlant)
 				if matches then
 					table.insert(tools, item)
 				end
@@ -1458,6 +1511,371 @@ local function runAutoShovelFruit(runId)
 	end)
 end
 
+local function getTrowelTool()
+	for _, container in ipairs({player.Character, player:FindFirstChildOfClass("Backpack")}) do
+		if container then
+			for _, item in ipairs(container:GetChildren()) do
+				if item:IsA("Tool") and type(item:GetAttribute("Trowel")) == "string" then
+					return item
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function getTrowelTargets(plot)
+	local targets = {}
+	local plants = plot and plot:FindFirstChild("Plants")
+	if not plants or selectionCount(selectedTrowelPlants) == 0 then
+		return targets
+	end
+	for _, model in ipairs(plants:GetChildren()) do
+		local seedName = model:GetAttribute("SeedName")
+		local ownerId = tonumber(model:GetAttribute("UserId"))
+		local plantId = model:GetAttribute("PlantId") or model.Name
+		local rarity = type(seedName) == "string" and (seedRarities[seedName] or "Common") or nil
+		local rarityAllowed = selectionCount(selectedTrowelRarities) == 0
+			or selectedTrowelRarities[rarity] == true
+		local pendingUntil = trowelPending[plantId]
+		if pendingUntil and os.clock() >= pendingUntil then
+			trowelPending[plantId] = nil
+			pendingUntil = nil
+		end
+		if plantId and seedName and ownerId == player.UserId and selectedTrowelPlants[seedName]
+			and rarityAllowed and not pendingUntil then
+			table.insert(targets, {id = plantId, name = seedName, model = model})
+		end
+	end
+	table.sort(targets, function(a, b)
+		return a.name < b.name
+	end)
+	return targets
+end
+
+local function getPlotGroundPosition(plot, worldPosition)
+	local reference = plot and plot:FindFirstChild("PlotSizeReference")
+	if not reference or not reference:IsA("BasePart") then
+		return nil
+	end
+	local localPoint = reference.CFrame:PointToObjectSpace(worldPosition)
+	local half = reference.Size / 2
+	if math.abs(localPoint.X) > half.X or math.abs(localPoint.Z) > half.Z then
+		return nil
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = {plot}
+	local origin = Vector3.new(worldPosition.X, reference.Position.Y + 500, worldPosition.Z)
+	local result = workspace:Raycast(origin, Vector3.new(0, -1000, 0), params)
+	if result and result.Instance:HasTag("PlantArea") then
+		return result.Position
+	end
+	return nil
+end
+
+local function getRandomPlotPosition(plot)
+	local reference = plot and plot:FindFirstChild("PlotSizeReference")
+	if not reference or not reference:IsA("BasePart") then
+		return nil
+	end
+	for _ = 1, 20 do
+		local x = (math.random() * 2 - 1) * reference.Size.X * 0.45
+		local z = (math.random() * 2 - 1) * reference.Size.Z * 0.45
+		local worldPoint = reference.CFrame:PointToWorldSpace(Vector3.new(x, 0, z))
+		local ground = getPlotGroundPosition(plot, worldPoint)
+		if ground then return ground end
+	end
+	return nil
+end
+
+local function resolveTrowelPosition(plot)
+	if trowelPositionMode == "Saved Position" then
+		return savedTrowelPosition and getPlotGroundPosition(plot, savedTrowelPosition) or nil
+	elseif trowelPositionMode == "Around Player" then
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not root then return nil end
+		for _ = 1, 12 do
+			local angle = math.random() * math.pi * 2
+			local radius = 4 + math.random() * 8
+			local point = root.Position + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+			local ground = getPlotGroundPosition(plot, point)
+			if ground then return ground end
+		end
+		return nil
+	end
+	return getRandomPlotPosition(plot)
+end
+
+local function runAutoTrowel(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while autoTrowelEnabled and autoTrowelRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local plot = getPlayerPlot()
+			local trowel = getTrowelTool()
+			local targets = getTrowelTargets(plot)
+			if not trowel then
+				screenGui:SetAttribute("AutoTrowelStatus", "Trowel unavailable")
+			elseif #targets == 0 then
+				screenGui:SetAttribute("AutoTrowelStatus", selectionCount(selectedTrowelPlants) == 0
+					and "Select at least one plant" or "Waiting for matching plants")
+			elseif trowelPositionMode == "Saved Position" and not savedTrowelPosition then
+				screenGui:SetAttribute("AutoTrowelStatus", "Set a trowel position first")
+			else
+				local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+				if humanoid and trowel.Parent ~= player.Character then
+					humanoid:EquipTool(trowel)
+					task.wait(0.08)
+				end
+				local moved = 0
+				for _, target in ipairs(targets) do
+					if not autoTrowelEnabled or autoTrowelRunId ~= runId then break end
+					local destination = resolveTrowelPosition(plot)
+					if destination then
+						local _, rotationY = target.model:GetPivot():ToEulerAnglesYXZ()
+						trowelPending[target.id] = os.clock() + math.max(2, trowelDelay + 1)
+						local ok = pcall(function()
+							networking.Trowel.MovePlant:Fire(target.id, destination, math.deg(rotationY))
+						end)
+						if ok then
+							moved += 1
+							screenGui:SetAttribute("LastTroweledPlant", target.name)
+							screenGui:SetAttribute("LastTrowelPosition", tostring(destination))
+						end
+					else
+						screenGui:SetAttribute("AutoTrowelStatus", "No valid plot position")
+					end
+					task.wait(math.max(0.05, trowelDelay))
+				end
+				screenGui:SetAttribute("LastAutoTrowelCount", moved)
+				screenGui:SetAttribute("AutoTrowelStatus", moved > 0 and "Moving plants" or "Waiting")
+			end
+			task.wait(0.5)
+		end
+	end)
+end
+
+local function getDroppedSeedName(part)
+	if part:GetAttribute("RainbowSeed") == true then return "Rainbow Seed" end
+	if part:GetAttribute("GoldSeed") == true then return "Gold Seed" end
+	if part:GetAttribute("MegaSeed") == true then return "Mega Seed" end
+	local seedPack = part:GetAttribute("SeedPack")
+	if type(seedPack) == "string" and seedPack ~= "" then return seedPack end
+	return nil
+end
+
+local function isSpecialDroppedSeed(part)
+	return part:GetAttribute("RainbowSeed") == true
+		or part:GetAttribute("GoldSeed") == true
+		or part:GetAttribute("MegaSeed") == true
+end
+
+local function isUserDroppedSeed(part)
+	for _, attributeName in ipairs({"UserId", "OwnerUserId", "OwnerId", "PlayerUserId"}) do
+		local value = part:GetAttribute(attributeName)
+		if value ~= nil then return tonumber(value) == player.UserId end
+	end
+	for _, attributeName in ipairs({"Owner", "PlayerName", "Username"}) do
+		local value = part:GetAttribute(attributeName)
+		if value ~= nil then
+			return tostring(value) == player.Name or tonumber(value) == player.UserId
+		end
+	end
+	local loweredName = string.lower(part.Name)
+	if string.find(loweredName, tostring(player.UserId), 1, true)
+		or string.find(loweredName, string.lower(player.Name), 1, true) then
+		return true
+	end
+	-- Some drops omit ownership metadata client-side; the server still validates the claimant.
+	return true
+end
+
+local function getDroppedSeedTargets()
+	local map = workspace:FindFirstChild("Map")
+	local folder = map and map:FindFirstChild("SeedPackSpawnServerLocations")
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local targets = {}
+	if not folder or not root then return targets end
+	for _, item in ipairs(folder:GetChildren()) do
+		if item:IsA("BasePart") then
+			local seedName = getDroppedSeedName(item)
+			local special = isSpecialDroppedSeed(item)
+			local matches = (collectedSeedSelection == "Server" and special)
+				or (collectedSeedSelection == "User" and not special and seedName ~= nil and isUserDroppedSeed(item))
+			local pendingUntil = droppedSeedPending[item]
+			if pendingUntil and (not item.Parent or os.clock() >= pendingUntil) then
+				droppedSeedPending[item] = nil
+				pendingUntil = nil
+			end
+			if matches and not pendingUntil and (item.Position - root.Position).Magnitude <= 250 then
+				table.insert(targets, {part = item, name = seedName, distance = (item.Position - root.Position).Magnitude})
+			end
+		end
+	end
+	table.sort(targets, function(a, b) return a.distance < b.distance end)
+	return targets
+end
+
+local function touchDroppedSeed(root, part)
+	if not root or not root.Parent or not part or not part.Parent then return false end
+	if firetouchinterest then
+		local ok = pcall(function()
+			firetouchinterest(root, part, 0)
+			task.wait(0.03)
+			firetouchinterest(root, part, 1)
+		end)
+		if ok then return true end
+	end
+	local original = root.CFrame
+	local ok = pcall(function()
+		root.CFrame = part.CFrame + Vector3.new(0, 2, 0)
+		task.wait(0.08)
+		root.CFrame = original
+	end)
+	return ok
+end
+
+local function runAutoCollectDroppedSeed(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while autoCollectDroppedSeedEnabled and autoCollectDroppedSeedRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			local targets = getDroppedSeedTargets()
+			local collected = 0
+			if not root then
+				screenGui:SetAttribute("AutoCollectDroppedSeedStatus", "Character unavailable")
+			elseif #targets == 0 then
+				screenGui:SetAttribute("AutoCollectDroppedSeedStatus", "Waiting for nearby dropped seeds")
+			else
+				for _, target in ipairs(targets) do
+					if not autoCollectDroppedSeedEnabled or autoCollectDroppedSeedRunId ~= runId then break end
+					droppedSeedPending[target.part] = os.clock() + 2
+					if touchDroppedSeed(root, target.part) then
+						collected += 1
+						screenGui:SetAttribute("LastCollectedDroppedSeed", target.name)
+					end
+					task.wait(math.max(0.05, collectedSeedDelay))
+				end
+				screenGui:SetAttribute("LastCollectedDroppedSeedCount", collected)
+				screenGui:SetAttribute("AutoCollectDroppedSeedStatus", collected > 0 and "Collecting seeds" or "Waiting")
+			end
+			task.wait(math.max(0.1, collectedSeedDelay))
+		end
+	end)
+end
+
+local function getInventoryPetNames()
+	local names = {}
+	for _, container in ipairs({player:FindFirstChildOfClass("Backpack"), player.Character}) do
+		if container then
+			for _, item in ipairs(container:GetChildren()) do
+				local petName = item:IsA("Tool") and item:GetAttribute("Pet") or nil
+				if type(petName) == "string" and petName ~= "" then names[petName] = true end
+			end
+		end
+	end
+	-- Keep active filters visible after the last pet of that species is sold.
+	for name in pairs(selectedSellPetNames) do names[name] = true end
+	local result = {}
+	for name in pairs(names) do table.insert(result, name) end
+	table.sort(result)
+	return result
+end
+
+local function getPetVariant(tool, petName)
+	for _, attributeName in ipairs({"PetSize", "Size", "Variant", "PetType", "Type"}) do
+		local value = tool:GetAttribute(attributeName)
+		if type(value) == "string" then
+			local lowered = string.lower(value)
+			if lowered == "big" then return "Big" end
+			if lowered == "huge" then return "Huge" end
+			if lowered == "rainbow" then return "Rainbow" end
+		end
+	end
+	local visibleName = string.lower(tool.Name)
+	if string.find(visibleName, "huge", 1, true) then return "Huge" end
+	if string.find(visibleName, "big", 1, true) then return "Big" end
+	if string.find(visibleName, "rainbow", 1, true) then return "Rainbow" end
+	return "Normal"
+end
+
+local function getSellPetTargets()
+	local targets = {}
+	if selectionCount(selectedSellPetNames) == 0 and selectionCount(selectedSellPetRarities) == 0 then
+		return targets
+	end
+	for _, container in ipairs({player:FindFirstChildOfClass("Backpack"), player.Character}) do
+		if container then
+			for _, tool in ipairs(container:GetChildren()) do
+				local petName = tool:IsA("Tool") and tool:GetAttribute("Pet") or nil
+				local petId = tool:IsA("Tool") and tool:GetAttribute("PetId") or nil
+				if type(petName) == "string" and type(petId) == "string" and petId ~= "" then
+					local rarity = type(petData[petName]) == "table" and petData[petName].Rarity or "Common"
+					local variant = getPetVariant(tool, petName)
+					local nameAllowed = selectionCount(selectedSellPetNames) == 0 or selectedSellPetNames[petName] == true
+					local rarityAllowed = selectionCount(selectedSellPetRarities) == 0 or selectedSellPetRarities[rarity] == true
+					local pendingUntil = sellPetPending[petId]
+					if pendingUntil and os.clock() >= pendingUntil then
+						sellPetPending[petId] = nil
+						pendingUntil = nil
+					end
+					if nameAllowed and rarityAllowed and not blacklistedPetVariants[variant] and not pendingUntil then
+						table.insert(targets, {
+							id = petId,
+							name = petName,
+							rarity = rarity,
+							variant = variant,
+							tool = tool,
+						})
+					end
+				end
+			end
+		end
+	end
+	table.sort(targets, function(a, b)
+		if a.name == b.name then return a.id < b.id end
+		return a.name < b.name
+	end)
+	return targets
+end
+
+local function runAutoSellPet(runId)
+	local myGeneration = autoPlantGeneration
+	task.spawn(function()
+		while autoSellPetEnabled and autoSellPetRunId == runId
+			and runtime.YupisotesGeneration == myGeneration and screenGui.Parent do
+			local targets = getSellPetTargets()
+			if #targets == 0 then
+				local noFilter = selectionCount(selectedSellPetNames) == 0 and selectionCount(selectedSellPetRarities) == 0
+				screenGui:SetAttribute("AutoSellPetStatus", noFilter and "Select a pet name or rarity" or "Waiting for matching pets")
+			else
+				local sold = 0
+				for _, target in ipairs(targets) do
+					if not autoSellPetEnabled or autoSellPetRunId ~= runId then break end
+					sellPetPending[target.id] = os.clock() + 5
+					local ok, response = pcall(function()
+						return networking.NPCS.SellPet:Fire(target.id)
+					end)
+					if ok and type(response) == "table" and response.Success then
+						sold += 1
+						screenGui:SetAttribute("LastSoldPet", target.name)
+						screenGui:SetAttribute("LastSoldPetId", target.id)
+						screenGui:SetAttribute("LastSoldPetPrice", tonumber(response.SellPrice) or 0)
+					else
+						sellPetPending[target.id] = nil
+					end
+					task.wait(math.max(0.05, sellPetDelay))
+				end
+				screenGui:SetAttribute("LastAutoSellPetCount", sold)
+				screenGui:SetAttribute("AutoSellPetStatus", sold > 0 and "Selling pets" or "Sale rejected")
+			end
+			task.wait(math.max(0.2, sellPetDelay))
+		end
+	end)
+end
+
 local function showFarm()
 	currentPage = "Farm"
 	dropdownOpen = false
@@ -1551,10 +1969,16 @@ local function showFarm()
 	local rarityButton = Instance.new("TextButton")
 	rarityButton.Name = "RaritySelectButton"
 	rarityButton.AutoButtonColor = false
-	rarityButton.Text = selectedRarity == "None" and "Select Options" or selectedRarity
+	rarityButton.Text = next(selectedPlantRarities) == nil and "Select Options" or table.concat((function()
+		local values = {}
+		for _, rarityName in ipairs(rarityOptions) do
+			if selectedPlantRarities[rarityName] then table.insert(values, rarityName) end
+		end
+		return values
+	end)(), ", ")
 	rarityButton.Font = Enum.Font.GothamMedium
 	rarityButton.TextSize = 11
-	rarityButton.TextColor3 = selectedRarity == "None" and palette.muted or palette.text
+	rarityButton.TextColor3 = next(selectedPlantRarities) == nil and palette.muted or palette.text
 	rarityButton.TextXAlignment = Enum.TextXAlignment.Left
 	rarityButton.BackgroundColor3 = rgb(35, 27, 48)
 	rarityButton.BorderSizePixel = 0
@@ -1923,7 +2347,7 @@ local function showFarm()
 
 		option.MouseButton1Click:Connect(function()
 			selectedPlant = plantName
-			selectedRarity = "None"
+			table.clear(selectedPlantRarities)
 			selectButton.Text = plantName
 			selectButton.TextColor3 = palette.text
 			rarityButton.Text = "Select Options"
@@ -1952,10 +2376,10 @@ local function showFarm()
 		rarityOption.Text = rarityName
 		rarityOption.Font = Enum.Font.GothamMedium
 		rarityOption.TextSize = 11
-		rarityOption.TextColor3 = rarityName == selectedRarity and rgb(221, 154, 255) or palette.text
+		rarityOption.TextColor3 = selectedPlantRarities[rarityName] and rgb(221, 154, 255) or palette.text
 		rarityOption.TextXAlignment = Enum.TextXAlignment.Left
-		rarityOption.BackgroundColor3 = rarityName == selectedRarity and rgb(48, 28, 64) or rgb(17, 18, 24)
-		rarityOption.BackgroundTransparency = rarityName == selectedRarity and 0.1 or 0.35
+		rarityOption.BackgroundColor3 = selectedPlantRarities[rarityName] and rgb(48, 28, 64) or rgb(17, 18, 24)
+		rarityOption.BackgroundTransparency = selectedPlantRarities[rarityName] and 0.1 or 0.35
 		rarityOption.BorderSizePixel = 0
 		rarityOption.Size = UDim2.new(1, 0, 0, 26)
 		rarityOption.LayoutOrder = index
@@ -1969,27 +2393,37 @@ local function showFarm()
 
 		table.insert(rarityButtons, rarityOption)
 		rarityOption.MouseButton1Click:Connect(function()
-			selectedRarity = rarityName
-			selectedPlant = "All Seeds"
-			rarityButton.Text = rarityName
-			rarityButton.TextColor3 = palette.text
-			selectButton.Text = "Select Options"
-			selectButton.TextColor3 = palette.muted
+			selectedPlantRarities[rarityName] = not selectedPlantRarities[rarityName] and true or nil
+			local selectedValues = {}
+			for _, orderedRarity in ipairs(rarityOptions) do
+				if selectedPlantRarities[orderedRarity] then table.insert(selectedValues, orderedRarity) end
+			end
+			local hasSelection = #selectedValues > 0
+			if hasSelection then
+				selectedPlant = "All Seeds"
+				selectButton.Text = "Select Options"
+				selectButton.TextColor3 = palette.muted
+			else
+				selectButton.Text = selectedPlant
+				selectButton.TextColor3 = palette.text
+			end
+			rarityButton.Text = hasSelection and table.concat(selectedValues, ", ") or "Select Options"
+			rarityButton.TextColor3 = hasSelection and palette.text or palette.muted
 			for _, plantOption in ipairs(optionsPanel:GetChildren()) do
 				if plantOption:IsA("TextButton") then
-					local selected = plantOption.Text == "All Seeds"
+					local selected = hasSelection and plantOption.Text == "All Seeds"
+						or not hasSelection and plantOption.Text == selectedPlant
 					plantOption.TextColor3 = selected and rgb(221, 154, 255) or palette.text
 					plantOption.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
 					plantOption.BackgroundTransparency = selected and 0.1 or 0.35
 				end
 			end
-			for _, sibling in ipairs(rarityButtons) do
-				local selected = sibling == rarityOption
+			for siblingIndex, sibling in ipairs(rarityButtons) do
+				local selected = selectedPlantRarities[rarityOptions[siblingIndex]] == true
 				sibling.TextColor3 = selected and rgb(221, 154, 255) or palette.text
 				sibling.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
 				sibling.BackgroundTransparency = selected and 0.1 or 0.35
 			end
-			setRarityOpen(false)
 		end)
 	end
 
@@ -2092,7 +2526,12 @@ local function showFarm()
 	local function syncAutoPlantAttributes()
 		screenGui:SetAttribute("AutoPlantEnabled", autoPlantEnabled)
 		screenGui:SetAttribute("SelectedPlant", selectedPlant)
-		screenGui:SetAttribute("SelectedRarity", selectedRarity)
+		local selectedRarityValues = {}
+		for _, rarityName in ipairs(rarityOptions) do
+			if selectedPlantRarities[rarityName] then table.insert(selectedRarityValues, rarityName) end
+		end
+		screenGui:SetAttribute("SelectedRarity", table.concat(selectedRarityValues, ","))
+		screenGui:SetAttribute("SelectedRarityCount", #selectedRarityValues)
 		screenGui:SetAttribute("PlantMethod", selectedMethod)
 		screenGui:SetAttribute("PlantSpeed", plantSpeed)
 	end
@@ -2366,6 +2805,7 @@ local function showFarm()
 	advancedRarityButton.TextSize = 11
 	advancedRarityButton.TextColor3 = palette.muted
 	advancedRarityButton.TextXAlignment = Enum.TextXAlignment.Left
+	advancedRarityButton.TextTruncate = Enum.TextTruncate.AtEnd
 	advancedRarityButton.BackgroundColor3 = rgb(35, 27, 48)
 	advancedRarityButton.BorderSizePixel = 0
 	advancedRarityButton.Position = UDim2.new(0.62, 0, 0, 12)
@@ -2395,6 +2835,7 @@ local function showFarm()
 	advancedMutationButton.TextSize = 11
 	advancedMutationButton.TextColor3 = palette.muted
 	advancedMutationButton.TextXAlignment = Enum.TextXAlignment.Left
+	advancedMutationButton.TextTruncate = Enum.TextTruncate.AtEnd
 	advancedMutationButton.BackgroundColor3 = rgb(35, 27, 48)
 	advancedMutationButton.BorderSizePixel = 0
 	advancedMutationButton.Position = UDim2.new(0.62, 0, 0, 15)
@@ -2825,22 +3266,23 @@ local function showFarm()
 		end
 	end)
 
-	local function updateMultiButton(button, selectedValues)
+	local function updateMultiButton(button, selectedValues, orderedChoices)
 		local names = {}
-		for name, selected in pairs(selectedValues) do
-			if selected then
-				table.insert(names, name)
+		if orderedChoices then
+			for _, name in ipairs(orderedChoices) do
+				if selectedValues[name] then table.insert(names, name) end
 			end
+		else
+			for name, selected in pairs(selectedValues) do
+				if selected then table.insert(names, name) end
+			end
+			table.sort(names)
 		end
-		table.sort(names)
 		if #names == 0 then
 			button.Text = "Select Options"
 			button.TextColor3 = palette.muted
-		elseif #names == 1 then
-			button.Text = names[1]
-			button.TextColor3 = palette.text
 		else
-			button.Text = tostring(#names) .. " Selected"
+			button.Text = table.concat(names, ", ")
 			button.TextColor3 = palette.text
 		end
 		return table.concat(names, ",")
@@ -2853,7 +3295,7 @@ local function showFarm()
 			option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
 			option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
 			option.BackgroundTransparency = selected and 0.1 or 0.35
-			screenGui:SetAttribute("HarvestRarities", updateMultiButton(advancedRarityButton, selectedHarvestRarities))
+			screenGui:SetAttribute("HarvestRarities", updateMultiButton(advancedRarityButton, selectedHarvestRarities, rarityOptions))
 		end)
 	end
 
@@ -2864,7 +3306,7 @@ local function showFarm()
 			option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
 			option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
 			option.BackgroundTransparency = selected and 0.1 or 0.35
-			screenGui:SetAttribute("HarvestMutations", updateMultiButton(advancedMutationButton, selectedHarvestMutations))
+			screenGui:SetAttribute("HarvestMutations", updateMultiButton(advancedMutationButton, selectedHarvestMutations, harvestMutationOptions))
 		end)
 	end
 
@@ -2922,8 +3364,8 @@ local function showFarm()
 		end)
 	end
 
-	updateMultiButton(advancedRarityButton, selectedHarvestRarities)
-	updateMultiButton(advancedMutationButton, selectedHarvestMutations)
+	updateMultiButton(advancedRarityButton, selectedHarvestRarities, rarityOptions)
+	updateMultiButton(advancedMutationButton, selectedHarvestMutations, harvestMutationOptions)
 
 	harvestHeader.MouseButton1Click:Connect(function()
 		harvestCategoryOpen = not harvestCategoryOpen
@@ -4167,6 +4609,7 @@ local function showFarm()
 		button.TextSize = 11
 		button.TextColor3 = palette.muted
 		button.TextXAlignment = Enum.TextXAlignment.Left
+		button.TextTruncate = Enum.TextTruncate.AtEnd
 		button.BackgroundColor3 = rgb(31, 26, 43)
 		button.BorderSizePixel = 0
 		button.Position = UDim2.new(0.62, 0, 0, 8)
@@ -4229,9 +4672,12 @@ local function showFarm()
 
 		local optionButtons = {}
 		local function refreshSummary()
-			local count = selectionCount(selection)
-			button.Text = count > 0 and (tostring(count) .. " Selected") or "Select Options"
-			button.TextColor3 = count > 0 and palette.text or palette.muted
+			local selectedNames = {}
+			for _, choice in ipairs(choices) do
+				if selection[choice] then table.insert(selectedNames, choice) end
+			end
+			button.Text = #selectedNames > 0 and table.concat(selectedNames, ", ") or "Select Options"
+			button.TextColor3 = #selectedNames > 0 and palette.text or palette.muted
 		end
 		local function updateCanvas()
 			local visible = 0
@@ -4586,6 +5032,7 @@ local function showFarm()
 			button.TextSize = 11
 			button.TextColor3 = palette.text
 			button.TextXAlignment = Enum.TextXAlignment.Left
+			button.TextTruncate = Enum.TextTruncate.AtEnd
 			button.BackgroundColor3 = rgb(31, 26, 43)
 			button.BorderSizePixel = 0
 			button.Position = UDim2.new(0.62, 0, 0, 8)
@@ -4655,11 +5102,8 @@ local function showFarm()
 				if #names == 0 then
 					button.Text = "Select Options"
 					button.TextColor3 = palette.muted
-				elseif #names <= 2 then
-					button.Text = table.concat(names, ", ")
-					button.TextColor3 = palette.text
 				else
-					button.Text = names[1] .. ", " .. names[2] .. ",..."
+					button.Text = table.concat(names, ", ")
 					button.TextColor3 = palette.text
 				end
 			end
@@ -5075,6 +5519,1277 @@ local function showFarm()
 		screenGui:SetAttribute("AutoShovelEnabled", autoShovelEnabled)
 	end
 	createAutoShovelSection()
+	end
+
+	do
+	local function createAutoTrowelSection()
+		local trowelHeader = Instance.new("TextButton")
+		trowelHeader.Name = "AutoTrowelHeader"
+		trowelHeader.AutoButtonColor = false
+		trowelHeader.Text = ""
+		trowelHeader.BackgroundColor3 = palette.card
+		trowelHeader.BorderSizePixel = 0
+		trowelHeader.Size = UDim2.new(1, 0, 0, 31)
+		trowelHeader.LayoutOrder = 16
+		trowelHeader.Parent = list
+		corner(trowelHeader, 4)
+		local headerText = label(trowelHeader, "Auto Trowel", 13, palette.text, true)
+		headerText.Position = UDim2.fromOffset(10, 0)
+		headerText.Size = UDim2.new(1, -40, 1, 0)
+		local headerArrow = label(trowelHeader, "v", 14, rgb(210, 210, 216), true)
+		headerArrow.Position = UDim2.new(1, -28, 0, 0)
+		headerArrow.Size = UDim2.fromOffset(20, 31)
+		headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local headerAccent = Instance.new("Frame")
+		headerAccent.BackgroundColor3 = palette.accent
+		headerAccent.BorderSizePixel = 0
+		headerAccent.Position = UDim2.new(0, 0, 1, -2)
+		headerAccent.Size = UDim2.new(1, 0, 0, 2)
+		headerAccent.Parent = trowelHeader
+
+		local trowelContent = Instance.new("Frame")
+		trowelContent.Name = "AutoTrowelContent"
+		trowelContent.BackgroundTransparency = 1
+		trowelContent.BorderSizePixel = 0
+		trowelContent.ClipsDescendants = true
+		trowelContent.Size = UDim2.new(1, 0, 0, 0)
+		trowelContent.LayoutOrder = 17
+		trowelContent.Parent = list
+
+		local dropdowns = {}
+		local function closeDropdowns(except)
+			for _, dropdown in ipairs(dropdowns) do
+				if dropdown ~= except then dropdown.setOpen(false) end
+			end
+		end
+
+		local function makeMultiFilter(name, titleText, descriptionText, y, choices, selected, zIndex)
+			local entry = {open = false}
+			local row = Instance.new("Frame")
+			row.BackgroundColor3 = palette.card
+			row.BorderSizePixel = 0
+			row.Position = UDim2.fromOffset(0, y)
+			row.Size = UDim2.new(1, 0, 0, 48)
+			row.Parent = trowelContent
+			corner(row, 4)
+			local rowTitle = label(row, titleText, 12, palette.text, true)
+			rowTitle.Position = UDim2.fromOffset(10, 4)
+			rowTitle.Size = UDim2.new(0.62, -10, 0, 18)
+			local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+			rowDescription.Position = UDim2.fromOffset(10, 21)
+			rowDescription.Size = UDim2.new(0.62, -10, 0, 20)
+
+			local button = Instance.new("TextButton")
+			button.Name = name .. "Button"
+			button.AutoButtonColor = false
+			button.Font = Enum.Font.GothamBold
+			button.TextSize = 11
+			button.TextColor3 = palette.text
+			button.TextXAlignment = Enum.TextXAlignment.Left
+			button.TextTruncate = Enum.TextTruncate.AtEnd
+			button.BackgroundColor3 = rgb(31, 26, 43)
+			button.BorderSizePixel = 0
+			button.Position = UDim2.new(0.62, 0, 0, 8)
+			button.Size = UDim2.new(0.38, -7, 0, 32)
+			button.Parent = row
+			corner(button, 4)
+			stroke(button, rgb(72, 48, 96), 0.45, 1)
+			padding(button, 10, 0, 30, 0)
+			local buttonArrow = label(button, "v", 13, rgb(210, 210, 216), true)
+			buttonArrow.Position = UDim2.new(1, -30, 0, 0)
+			buttonArrow.Size = UDim2.fromOffset(20, 32)
+			buttonArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+			local panel = Instance.new("Frame")
+			panel.Name = name .. "Dropdown"
+			panel.BackgroundColor3 = rgb(18, 18, 25)
+			panel.BorderSizePixel = 0
+			panel.ClipsDescendants = true
+			panel.Position = UDim2.new(0.62, 0, 0, y + 44)
+			panel.Size = UDim2.new(0.38, -7, 0, 0)
+			panel.ZIndex = zIndex
+			panel.Parent = trowelContent
+			corner(panel, 4)
+			stroke(panel, rgb(91, 39, 124), 0.1, 1)
+			local search = Instance.new("TextBox")
+			search.ClearTextOnFocus = false
+			search.PlaceholderText = "Search"
+			search.Text = ""
+			search.Font = Enum.Font.GothamMedium
+			search.TextSize = 11
+			search.TextColor3 = palette.text
+			search.PlaceholderColor3 = palette.muted
+			search.BackgroundColor3 = rgb(35, 27, 48)
+			search.BorderSizePixel = 0
+			search.Position = UDim2.fromOffset(4, 4)
+			search.Size = UDim2.new(1, -8, 0, 26)
+			search.ZIndex = zIndex + 1
+			search.Parent = panel
+			corner(search, 3)
+			local optionList = Instance.new("ScrollingFrame")
+			optionList.BackgroundTransparency = 1
+			optionList.BorderSizePixel = 0
+			optionList.CanvasSize = UDim2.fromOffset(0, 0)
+			optionList.ScrollBarImageColor3 = palette.accent
+			optionList.ScrollBarThickness = 3
+			optionList.Position = UDim2.fromOffset(4, 34)
+			optionList.Size = UDim2.new(1, -8, 1, -38)
+			optionList.ZIndex = zIndex + 1
+			optionList.Parent = panel
+			local optionLayout = Instance.new("UIListLayout")
+			optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			optionLayout.Padding = UDim.new(0, 2)
+			optionLayout.Parent = optionList
+			local optionButtons = {}
+			local function refreshButton()
+				local names = {}
+				for _, choice in ipairs(choices) do
+					if selected[choice] then
+						table.insert(names, choice)
+					end
+				end
+				button.Text = #names == 0 and "Select Options" or table.concat(names, ", ")
+				button.TextColor3 = #names == 0 and palette.muted or palette.text
+			end
+			for index, choice in ipairs(choices) do
+				local option = Instance.new("TextButton")
+				option.AutoButtonColor = false
+				option.Text = choice
+				option.Font = Enum.Font.GothamMedium
+				option.TextSize = 11
+				option.TextColor3 = palette.text
+				option.TextXAlignment = Enum.TextXAlignment.Left
+				option.BackgroundColor3 = selected[choice] and rgb(57, 22, 78) or rgb(18, 18, 25)
+				option.BorderSizePixel = 0
+				option.Size = UDim2.new(1, -3, 0, 27)
+				option.LayoutOrder = index
+				option.ZIndex = zIndex + 2
+				option.Parent = optionList
+				padding(option, 10, 0, 4, 0)
+				option.MouseButton1Click:Connect(function()
+					selected[choice] = not selected[choice] and true or nil
+					option.BackgroundColor3 = selected[choice] and rgb(57, 22, 78) or rgb(18, 18, 25)
+					refreshButton()
+				end)
+				table.insert(optionButtons, {button = option, choice = choice})
+			end
+			local function updateCanvas()
+				optionList.CanvasSize = UDim2.fromOffset(0, optionLayout.AbsoluteContentSize.Y)
+			end
+			optionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+			search:GetPropertyChangedSignal("Text"):Connect(function()
+				local query = string.lower(search.Text)
+				for _, ref in ipairs(optionButtons) do
+					ref.button.Visible = query == "" or string.find(string.lower(ref.choice), query, 1, true) ~= nil
+				end
+				updateCanvas()
+			end)
+			function entry.setOpen(open)
+				entry.open = open
+				panel.Size = UDim2.new(0.38, -7, 0, open and 160 or 0)
+				buttonArrow.Rotation = open and 180 or 0
+			end
+			button.MouseButton1Click:Connect(function()
+				closeDropdowns(entry)
+				entry.setOpen(not entry.open)
+			end)
+			refreshButton()
+			table.insert(dropdowns, entry)
+		end
+
+		makeMultiFilter("TrowelPlantName", "Trowel Plant Name", "Choose which plants should be moved.", 0, favoriteFruitOptions, selectedTrowelPlants, 220)
+		makeMultiFilter("TrowelPlantRarity", "Trowel Plant Rarity", "Move plants from these rarities.", 54, rarityOptions, selectedTrowelRarities, 230)
+
+		local modeRow = Instance.new("Frame")
+		modeRow.BackgroundColor3 = palette.card
+		modeRow.BorderSizePixel = 0
+		modeRow.Position = UDim2.fromOffset(0, 108)
+		modeRow.Size = UDim2.new(1, 0, 0, 48)
+		modeRow.Parent = trowelContent
+		corner(modeRow, 4)
+		local modeTitle = label(modeRow, "Trowel Position Mode", 12, palette.text, true)
+		modeTitle.Position = UDim2.fromOffset(10, 4)
+		modeTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local modeDescription = label(modeRow, "Choose where selected plants should be moved.", 10, palette.muted, false)
+		modeDescription.Position = UDim2.fromOffset(10, 21)
+		modeDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		local modeButton = Instance.new("TextButton")
+		modeButton.Name = "TrowelPositionModeButton"
+		modeButton.AutoButtonColor = false
+		modeButton.Text = trowelPositionMode
+		modeButton.Font = Enum.Font.GothamBold
+		modeButton.TextSize = 11
+		modeButton.TextColor3 = palette.text
+		modeButton.TextXAlignment = Enum.TextXAlignment.Left
+		modeButton.TextTruncate = Enum.TextTruncate.AtEnd
+		modeButton.BackgroundColor3 = rgb(31, 26, 43)
+		modeButton.BorderSizePixel = 0
+		modeButton.Position = UDim2.new(0.62, 0, 0, 8)
+		modeButton.Size = UDim2.new(0.38, -7, 0, 32)
+		modeButton.Parent = modeRow
+		corner(modeButton, 4)
+		stroke(modeButton, rgb(72, 48, 96), 0.45, 1)
+		padding(modeButton, 10, 0, 30, 0)
+		local modeArrow = label(modeButton, "v", 13, rgb(210, 210, 216), true)
+		modeArrow.Position = UDim2.new(1, -30, 0, 0)
+		modeArrow.Size = UDim2.fromOffset(20, 32)
+		modeArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local modePanel = Instance.new("Frame")
+		modePanel.Name = "TrowelPositionModeDropdown"
+		modePanel.BackgroundColor3 = rgb(18, 18, 25)
+		modePanel.BorderSizePixel = 0
+		modePanel.ClipsDescendants = true
+		modePanel.Position = UDim2.new(0.62, 0, 0, 152)
+		modePanel.Size = UDim2.new(0.38, -7, 0, 0)
+		modePanel.ZIndex = 240
+		modePanel.Parent = trowelContent
+		corner(modePanel, 4)
+		stroke(modePanel, rgb(91, 39, 124), 0.1, 1)
+		local modeLayout = Instance.new("UIListLayout")
+		modeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		modeLayout.Padding = UDim.new(0, 2)
+		modeLayout.Parent = modePanel
+		local modeOpen = false
+		for index, modeName in ipairs({"Random Plot Position", "Saved Position", "Around Player"}) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = modeName
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 10
+			option.TextColor3 = palette.text
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BackgroundColor3 = rgb(18, 18, 25)
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, 0, 0, 28)
+			option.LayoutOrder = index
+			option.ZIndex = 241
+			option.Parent = modePanel
+			padding(option, 8, 0, 2, 0)
+			option.MouseButton1Click:Connect(function()
+				trowelPositionMode = modeName
+				modeButton.Text = modeName
+				modeOpen = false
+				modePanel.Size = UDim2.new(0.38, -7, 0, 0)
+				modeArrow.Rotation = 0
+				screenGui:SetAttribute("TrowelPositionMode", modeName)
+			end)
+		end
+		modeButton.MouseButton1Click:Connect(function()
+			closeDropdowns()
+			modeOpen = not modeOpen
+			modePanel.Size = UDim2.new(0.38, -7, 0, modeOpen and 88 or 0)
+			modeArrow.Rotation = modeOpen and 180 or 0
+		end)
+
+		local setPositionButton = Instance.new("TextButton")
+		setPositionButton.Name = "SetTrowelPositionButton"
+		setPositionButton.AutoButtonColor = false
+		setPositionButton.Text = "Set Trowel Position"
+		setPositionButton.Font = Enum.Font.GothamBold
+		setPositionButton.TextSize = 11
+		setPositionButton.TextColor3 = palette.text
+		setPositionButton.BackgroundColor3 = rgb(28, 33, 28)
+		setPositionButton.BorderSizePixel = 0
+		setPositionButton.Position = UDim2.fromOffset(0, 162)
+		setPositionButton.Size = UDim2.new(1, 0, 0, 40)
+		setPositionButton.Parent = trowelContent
+		corner(setPositionButton, 4)
+		setPositionButton.MouseButton1Click:Connect(function()
+			local plot = getPlayerPlot()
+			local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			local position = root and getPlotGroundPosition(plot, root.Position) or nil
+			if position then
+				savedTrowelPosition = position
+				trowelPositionMode = "Saved Position"
+				modeButton.Text = trowelPositionMode
+				setPositionButton.Text = "Position Saved"
+				screenGui:SetAttribute("TrowelPositionMode", trowelPositionMode)
+				screenGui:SetAttribute("SavedTrowelPosition", tostring(position))
+				task.delay(1.2, function()
+					if setPositionButton.Parent then setPositionButton.Text = "Set Trowel Position" end
+				end)
+			else
+				setPositionButton.Text = "Stand Inside Your Plot"
+				task.delay(1.2, function()
+					if setPositionButton.Parent then setPositionButton.Text = "Set Trowel Position" end
+				end)
+			end
+		end)
+
+		local delayRow = Instance.new("Frame")
+		delayRow.BackgroundColor3 = palette.card
+		delayRow.BorderSizePixel = 0
+		delayRow.Position = UDim2.fromOffset(0, 208)
+		delayRow.Size = UDim2.new(1, 0, 0, 48)
+		delayRow.Parent = trowelContent
+		corner(delayRow, 4)
+		local delayTitle = label(delayRow, "Trowel Delay", 12, palette.text, true)
+		delayTitle.Position = UDim2.fromOffset(10, 4)
+		delayTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local delayDescription = label(delayRow, "Wait time between each plant move.", 10, palette.muted, false)
+		delayDescription.Position = UDim2.fromOffset(10, 21)
+		delayDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		local delayInput = Instance.new("TextBox")
+		delayInput.Name = "TrowelDelayInput"
+		delayInput.ClearTextOnFocus = false
+		delayInput.Text = tostring(trowelDelay)
+		delayInput.Font = Enum.Font.GothamMedium
+		delayInput.TextSize = 11
+		delayInput.TextColor3 = palette.text
+		delayInput.TextXAlignment = Enum.TextXAlignment.Left
+		delayInput.BackgroundColor3 = rgb(31, 26, 43)
+		delayInput.BorderSizePixel = 0
+		delayInput.Position = UDim2.new(0.62, 0, 0, 8)
+		delayInput.Size = UDim2.new(0.38, -7, 0, 32)
+		delayInput.Parent = delayRow
+		corner(delayInput, 4)
+		stroke(delayInput, rgb(125, 49, 166), 0.2, 1)
+		padding(delayInput, 8, 0, 8, 0)
+		local function commitDelay()
+			local normalized = string.gsub(delayInput.Text, ",", ".")
+			trowelDelay = math.clamp(tonumber(normalized) or 1, 0, 60)
+			delayInput.Text = tostring(trowelDelay)
+			screenGui:SetAttribute("TrowelDelay", trowelDelay)
+		end
+		delayInput.FocusLost:Connect(commitDelay)
+
+		local startRow = Instance.new("Frame")
+		startRow.BackgroundColor3 = palette.card
+		startRow.BorderSizePixel = 0
+		startRow.Position = UDim2.fromOffset(0, 262)
+		startRow.Size = UDim2.new(1, 0, 0, 48)
+		startRow.Parent = trowelContent
+		corner(startRow, 4)
+		local startTitle = label(startRow, "Start Auto Trowel", 12, palette.text, true)
+		startTitle.Position = UDim2.fromOffset(10, 4)
+		startTitle.Size = UDim2.new(0.76, -10, 0, 18)
+		local startDescription = label(startRow, "Automatically moves selected plants with your trowel.", 10, palette.muted, false)
+		startDescription.Position = UDim2.fromOffset(10, 21)
+		startDescription.Size = UDim2.new(0.76, -10, 0, 20)
+		local startToggle = Instance.new("TextButton")
+		startToggle.Name = "StartAutoTrowelToggle"
+		startToggle.AutoButtonColor = false
+		startToggle.Text = ""
+		startToggle.BackgroundColor3 = autoTrowelEnabled and palette.accent or rgb(48, 46, 58)
+		startToggle.BorderSizePixel = 0
+		startToggle.Position = UDim2.new(1, -50, 0.5, -11)
+		startToggle.Size = UDim2.fromOffset(38, 22)
+		startToggle.Parent = startRow
+		corner(startToggle, 11)
+		stroke(startToggle, rgb(116, 70, 152), autoTrowelEnabled and 0.15 or 0.45, 1)
+		local startKnob = Instance.new("Frame")
+		startKnob.BackgroundColor3 = rgb(239, 239, 243)
+		startKnob.BorderSizePixel = 0
+		startKnob.Position = autoTrowelEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+		startKnob.Size = UDim2.fromOffset(16, 16)
+		startKnob.Parent = startToggle
+		corner(startKnob, 8)
+		startToggle.MouseButton1Click:Connect(function()
+			commitDelay()
+			autoTrowelEnabled = not autoTrowelEnabled
+			autoTrowelRunId += 1
+			if autoTrowelEnabled then
+				screenGui:SetAttribute("AutoTrowelStatus", "Checking plants")
+				runAutoTrowel(autoTrowelRunId)
+			else
+				screenGui:SetAttribute("AutoTrowelStatus", "Stopped")
+			end
+			screenGui:SetAttribute("AutoTrowelEnabled", autoTrowelEnabled)
+			TweenService:Create(startToggle, TweenInfo.new(0.18), {
+				BackgroundColor3 = autoTrowelEnabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(startKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = autoTrowelEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+		end)
+
+		local categoryOpen = false
+		trowelHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then
+				closeDropdowns()
+				modeOpen = false
+				modePanel.Size = UDim2.new(0.38, -7, 0, 0)
+				modeArrow.Rotation = 0
+			end
+			TweenService:Create(trowelContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 310 or 0),
+			}):Play()
+			TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("TrowelPositionMode", trowelPositionMode)
+		screenGui:SetAttribute("TrowelDelay", trowelDelay)
+		screenGui:SetAttribute("AutoTrowelEnabled", autoTrowelEnabled)
+	end
+	createAutoTrowelSection()
+	end
+
+	do
+	local function createAutoCollectDroppedSeedSection()
+		local collectHeader = Instance.new("TextButton")
+		collectHeader.Name = "AutoCollectDroppedSeedHeader"
+		collectHeader.AutoButtonColor = false
+		collectHeader.Text = ""
+		collectHeader.BackgroundColor3 = palette.card
+		collectHeader.BorderSizePixel = 0
+		collectHeader.Size = UDim2.new(1, 0, 0, 31)
+		collectHeader.LayoutOrder = 18
+		collectHeader.Parent = list
+		corner(collectHeader, 4)
+		local headerText = label(collectHeader, "Auto Collect Dropped Seed", 13, palette.text, true)
+		headerText.Position = UDim2.fromOffset(10, 0)
+		headerText.Size = UDim2.new(1, -40, 1, 0)
+		local headerArrow = label(collectHeader, "v", 14, rgb(210, 210, 216), true)
+		headerArrow.Position = UDim2.new(1, -28, 0, 0)
+		headerArrow.Size = UDim2.fromOffset(20, 31)
+		headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local headerAccent = Instance.new("Frame")
+		headerAccent.BackgroundColor3 = palette.accent
+		headerAccent.BorderSizePixel = 0
+		headerAccent.Position = UDim2.new(0, 0, 1, -2)
+		headerAccent.Size = UDim2.new(1, 0, 0, 2)
+		headerAccent.Parent = collectHeader
+
+		local collectContent = Instance.new("Frame")
+		collectContent.Name = "AutoCollectDroppedSeedContent"
+		collectContent.BackgroundTransparency = 1
+		collectContent.BorderSizePixel = 0
+		collectContent.ClipsDescendants = true
+		collectContent.Size = UDim2.new(1, 0, 0, 0)
+		collectContent.LayoutOrder = 19
+		collectContent.Parent = list
+
+		local selectRow = Instance.new("Frame")
+		selectRow.BackgroundColor3 = palette.card
+		selectRow.BorderSizePixel = 0
+		selectRow.Position = UDim2.fromOffset(0, 0)
+		selectRow.Size = UDim2.new(1, 0, 0, 48)
+		selectRow.Parent = collectContent
+		corner(selectRow, 4)
+		local selectTitle = label(selectRow, "Select Collected Seed", 12, palette.text, true)
+		selectTitle.Position = UDim2.fromOffset(10, 4)
+		selectTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local selectDescription = label(selectRow, "Server: event seeds. User: all your normal seeds.", 10, palette.muted, false)
+		selectDescription.Position = UDim2.fromOffset(10, 21)
+		selectDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		local selectButton = Instance.new("TextButton")
+		selectButton.Name = "CollectedSeedSelectionButton"
+		selectButton.AutoButtonColor = false
+		selectButton.Text = collectedSeedSelection
+		selectButton.Font = Enum.Font.GothamBold
+		selectButton.TextSize = 11
+		selectButton.TextColor3 = palette.text
+		selectButton.TextXAlignment = Enum.TextXAlignment.Left
+		selectButton.TextTruncate = Enum.TextTruncate.AtEnd
+		selectButton.BackgroundColor3 = rgb(31, 26, 43)
+		selectButton.BorderSizePixel = 0
+		selectButton.Position = UDim2.new(0.62, 0, 0, 8)
+		selectButton.Size = UDim2.new(0.38, -7, 0, 32)
+		selectButton.Parent = selectRow
+		corner(selectButton, 4)
+		stroke(selectButton, rgb(72, 48, 96), 0.45, 1)
+		padding(selectButton, 10, 0, 30, 0)
+		local selectArrow = label(selectButton, "v", 13, rgb(210, 210, 216), true)
+		selectArrow.Position = UDim2.new(1, -30, 0, 0)
+		selectArrow.Size = UDim2.fromOffset(20, 32)
+		selectArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+		local selectPanel = Instance.new("Frame")
+		selectPanel.Name = "CollectedSeedSelectionDropdown"
+		selectPanel.BackgroundColor3 = rgb(18, 18, 25)
+		selectPanel.BorderSizePixel = 0
+		selectPanel.ClipsDescendants = true
+		selectPanel.Position = UDim2.new(0.62, 0, 0, 44)
+		selectPanel.Size = UDim2.new(0.38, -7, 0, 0)
+		selectPanel.ZIndex = 250
+		selectPanel.Parent = collectContent
+		corner(selectPanel, 4)
+		stroke(selectPanel, rgb(91, 39, 124), 0.1, 1)
+		local optionList = Instance.new("ScrollingFrame")
+		optionList.BackgroundTransparency = 1
+		optionList.BorderSizePixel = 0
+		optionList.CanvasSize = UDim2.fromOffset(0, 0)
+		optionList.ScrollBarImageColor3 = palette.accent
+		optionList.ScrollBarThickness = 3
+		optionList.Size = UDim2.new(1, 0, 1, 0)
+		optionList.ZIndex = 251
+		optionList.Parent = selectPanel
+		local optionLayout = Instance.new("UIListLayout")
+		optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		optionLayout.Padding = UDim.new(0, 2)
+		optionLayout.Parent = optionList
+		local collectOptions = {"Server", "User"}
+		local selectionOpen = false
+		for index, optionName in ipairs(collectOptions) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = optionName
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 10
+			option.TextColor3 = palette.text
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BackgroundColor3 = optionName == collectedSeedSelection and rgb(57, 22, 78) or rgb(18, 18, 25)
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, -3, 0, 27)
+			option.LayoutOrder = index
+			option.ZIndex = 252
+			option.Parent = optionList
+			padding(option, 10, 0, 3, 0)
+			option.MouseButton1Click:Connect(function()
+				collectedSeedSelection = optionName
+				selectButton.Text = optionName
+				selectionOpen = false
+				selectPanel.Size = UDim2.new(0.38, -7, 0, 0)
+				selectArrow.Rotation = 0
+				for _, other in ipairs(optionList:GetChildren()) do
+					if other:IsA("TextButton") then
+						other.BackgroundColor3 = other == option and rgb(57, 22, 78) or rgb(18, 18, 25)
+					end
+				end
+				screenGui:SetAttribute("CollectedSeedSelection", optionName)
+			end)
+		end
+		optionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			optionList.CanvasSize = UDim2.fromOffset(0, optionLayout.AbsoluteContentSize.Y)
+		end)
+		selectButton.MouseButton1Click:Connect(function()
+			selectionOpen = not selectionOpen
+			selectPanel.Size = UDim2.new(0.38, -7, 0, selectionOpen and 106 or 0)
+			selectArrow.Rotation = selectionOpen and 180 or 0
+		end)
+
+		local delayRow = Instance.new("Frame")
+		delayRow.BackgroundColor3 = palette.card
+		delayRow.BorderSizePixel = 0
+		delayRow.Position = UDim2.fromOffset(0, 54)
+		delayRow.Size = UDim2.new(1, 0, 0, 48)
+		delayRow.Parent = collectContent
+		corner(delayRow, 4)
+		local delayTitle = label(delayRow, "Collected Delay", 12, palette.text, true)
+		delayTitle.Position = UDim2.fromOffset(10, 4)
+		delayTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local delayDescription = label(delayRow, "Wait time between pickup checks.", 10, palette.muted, false)
+		delayDescription.Position = UDim2.fromOffset(10, 21)
+		delayDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		local delayInput = Instance.new("TextBox")
+		delayInput.Name = "CollectedSeedDelayInput"
+		delayInput.ClearTextOnFocus = false
+		delayInput.Text = tostring(collectedSeedDelay)
+		delayInput.Font = Enum.Font.GothamMedium
+		delayInput.TextSize = 11
+		delayInput.TextColor3 = palette.text
+		delayInput.TextXAlignment = Enum.TextXAlignment.Left
+		delayInput.BackgroundColor3 = rgb(31, 26, 43)
+		delayInput.BorderSizePixel = 0
+		delayInput.Position = UDim2.new(0.62, 0, 0, 8)
+		delayInput.Size = UDim2.new(0.38, -7, 0, 32)
+		delayInput.Parent = delayRow
+		corner(delayInput, 4)
+		stroke(delayInput, rgb(125, 49, 166), 0.2, 1)
+		padding(delayInput, 8, 0, 8, 0)
+		local function commitDelay()
+			local normalized = string.gsub(delayInput.Text, ",", ".")
+			collectedSeedDelay = math.clamp(tonumber(normalized) or 0.5, 0.05, 60)
+			delayInput.Text = tostring(collectedSeedDelay)
+			screenGui:SetAttribute("CollectedSeedDelay", collectedSeedDelay)
+		end
+		delayInput.FocusLost:Connect(commitDelay)
+
+		local startRow = Instance.new("Frame")
+		startRow.BackgroundColor3 = palette.card
+		startRow.BorderSizePixel = 0
+		startRow.Position = UDim2.fromOffset(0, 108)
+		startRow.Size = UDim2.new(1, 0, 0, 48)
+		startRow.Parent = collectContent
+		corner(startRow, 4)
+		local startTitle = label(startRow, "Start Collect Dropped Seed", 12, palette.text, true)
+		startTitle.Position = UDim2.fromOffset(10, 4)
+		startTitle.Size = UDim2.new(0.76, -10, 0, 18)
+		local startDescription = label(startRow, "Automatically collects selected dropped seeds nearby.", 10, palette.muted, false)
+		startDescription.Position = UDim2.fromOffset(10, 21)
+		startDescription.Size = UDim2.new(0.76, -10, 0, 20)
+		local startToggle = Instance.new("TextButton")
+		startToggle.Name = "StartCollectDroppedSeedToggle"
+		startToggle.AutoButtonColor = false
+		startToggle.Text = ""
+		startToggle.BackgroundColor3 = autoCollectDroppedSeedEnabled and palette.accent or rgb(48, 46, 58)
+		startToggle.BorderSizePixel = 0
+		startToggle.Position = UDim2.new(1, -50, 0.5, -11)
+		startToggle.Size = UDim2.fromOffset(38, 22)
+		startToggle.Parent = startRow
+		corner(startToggle, 11)
+		stroke(startToggle, rgb(116, 70, 152), autoCollectDroppedSeedEnabled and 0.15 or 0.45, 1)
+		local startKnob = Instance.new("Frame")
+		startKnob.BackgroundColor3 = rgb(239, 239, 243)
+		startKnob.BorderSizePixel = 0
+		startKnob.Position = autoCollectDroppedSeedEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+		startKnob.Size = UDim2.fromOffset(16, 16)
+		startKnob.Parent = startToggle
+		corner(startKnob, 8)
+		startToggle.MouseButton1Click:Connect(function()
+			commitDelay()
+			autoCollectDroppedSeedEnabled = not autoCollectDroppedSeedEnabled
+			autoCollectDroppedSeedRunId += 1
+			if autoCollectDroppedSeedEnabled then
+				screenGui:SetAttribute("AutoCollectDroppedSeedStatus", "Checking nearby seeds")
+				runAutoCollectDroppedSeed(autoCollectDroppedSeedRunId)
+			else
+				screenGui:SetAttribute("AutoCollectDroppedSeedStatus", "Stopped")
+			end
+			screenGui:SetAttribute("AutoCollectDroppedSeedEnabled", autoCollectDroppedSeedEnabled)
+			TweenService:Create(startToggle, TweenInfo.new(0.18), {
+				BackgroundColor3 = autoCollectDroppedSeedEnabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(startKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = autoCollectDroppedSeedEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+		end)
+
+		local categoryOpen = false
+		collectHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then
+				selectionOpen = false
+				selectPanel.Size = UDim2.new(0.38, -7, 0, 0)
+				selectArrow.Rotation = 0
+			end
+			TweenService:Create(collectContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 156 or 0),
+			}):Play()
+			TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("CollectedSeedSelection", collectedSeedSelection)
+		screenGui:SetAttribute("CollectedSeedDelay", collectedSeedDelay)
+		screenGui:SetAttribute("AutoCollectDroppedSeedEnabled", autoCollectDroppedSeedEnabled)
+	end
+	createAutoCollectDroppedSeedSection()
+	end
+
+	do
+	local function createAutoSellPetSection()
+		local petHeader = Instance.new("TextButton")
+		petHeader.Name = "AutoSellPetHeader"
+		petHeader.AutoButtonColor = false
+		petHeader.Text = ""
+		petHeader.BackgroundColor3 = palette.card
+		petHeader.BorderSizePixel = 0
+		petHeader.Size = UDim2.new(1, 0, 0, 31)
+		petHeader.LayoutOrder = 20
+		petHeader.Parent = list
+		corner(petHeader, 4)
+		local headerText = label(petHeader, "Auto Sell Pet", 13, palette.text, true)
+		headerText.Position = UDim2.fromOffset(10, 0)
+		headerText.Size = UDim2.new(1, -40, 1, 0)
+		local headerArrow = label(petHeader, "v", 14, rgb(210, 210, 216), true)
+		headerArrow.Position = UDim2.new(1, -28, 0, 0)
+		headerArrow.Size = UDim2.fromOffset(20, 31)
+		headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local headerAccent = Instance.new("Frame")
+		headerAccent.BackgroundColor3 = palette.accent
+		headerAccent.BorderSizePixel = 0
+		headerAccent.Position = UDim2.new(0, 0, 1, -2)
+		headerAccent.Size = UDim2.new(1, 0, 0, 2)
+		headerAccent.Parent = petHeader
+
+		local petContent = Instance.new("Frame")
+		petContent.Name = "AutoSellPetContent"
+		petContent.BackgroundTransparency = 1
+		petContent.BorderSizePixel = 0
+		petContent.ClipsDescendants = true
+		petContent.Size = UDim2.new(1, 0, 0, 0)
+		petContent.LayoutOrder = 21
+		petContent.Parent = list
+
+		local filters = {}
+		local function closeFilters(except)
+			for _, filter in ipairs(filters) do
+				if filter ~= except then filter.setOpen(false) end
+			end
+		end
+		local function makePetFilter(name, titleText, descriptionText, y, selected, zIndex)
+			local entry = {open = false}
+			local row = Instance.new("Frame")
+			row.BackgroundColor3 = palette.card
+			row.BorderSizePixel = 0
+			row.Position = UDim2.fromOffset(0, y)
+			row.Size = UDim2.new(1, 0, 0, 48)
+			row.Parent = petContent
+			corner(row, 4)
+			local rowTitle = label(row, titleText, 12, palette.text, true)
+			rowTitle.Position = UDim2.fromOffset(10, 4)
+			rowTitle.Size = UDim2.new(0.62, -10, 0, 18)
+			local rowDescription = label(row, descriptionText, 10, palette.muted, false)
+			rowDescription.Position = UDim2.fromOffset(10, 21)
+			rowDescription.Size = UDim2.new(0.62, -10, 0, 20)
+			local button = Instance.new("TextButton")
+			button.Name = name .. "Button"
+			button.AutoButtonColor = false
+			button.Font = Enum.Font.GothamBold
+			button.TextSize = 11
+			button.TextColor3 = palette.text
+			button.TextXAlignment = Enum.TextXAlignment.Left
+			button.TextTruncate = Enum.TextTruncate.AtEnd
+			button.BackgroundColor3 = rgb(31, 26, 43)
+			button.BorderSizePixel = 0
+			button.Position = UDim2.new(0.62, 0, 0, 8)
+			button.Size = UDim2.new(0.38, -7, 0, 32)
+			button.Parent = row
+			corner(button, 4)
+			stroke(button, rgb(72, 48, 96), 0.45, 1)
+			padding(button, 10, 0, 30, 0)
+			local buttonArrow = label(button, "v", 13, rgb(210, 210, 216), true)
+			buttonArrow.Position = UDim2.new(1, -30, 0, 0)
+			buttonArrow.Size = UDim2.fromOffset(20, 32)
+			buttonArrow.TextXAlignment = Enum.TextXAlignment.Center
+			local panel = Instance.new("Frame")
+			panel.Name = name .. "Dropdown"
+			panel.BackgroundColor3 = rgb(18, 18, 25)
+			panel.BorderSizePixel = 0
+			panel.ClipsDescendants = true
+			panel.Position = UDim2.new(0.62, 0, 0, y + 44)
+			panel.Size = UDim2.new(0.38, -7, 0, 0)
+			panel.ZIndex = zIndex
+			panel.Parent = petContent
+			corner(panel, 4)
+			stroke(panel, rgb(91, 39, 124), 0.1, 1)
+			local search = Instance.new("TextBox")
+			search.ClearTextOnFocus = false
+			search.PlaceholderText = "Search"
+			search.Text = ""
+			search.Font = Enum.Font.GothamMedium
+			search.TextSize = 11
+			search.TextColor3 = palette.text
+			search.PlaceholderColor3 = palette.muted
+			search.BackgroundColor3 = rgb(35, 27, 48)
+			search.BorderSizePixel = 0
+			search.Position = UDim2.fromOffset(4, 4)
+			search.Size = UDim2.new(1, -8, 0, 26)
+			search.ZIndex = zIndex + 1
+			search.Parent = panel
+			corner(search, 3)
+			local optionList = Instance.new("ScrollingFrame")
+			optionList.BackgroundTransparency = 1
+			optionList.BorderSizePixel = 0
+			optionList.CanvasSize = UDim2.fromOffset(0, 0)
+			optionList.ScrollBarImageColor3 = palette.accent
+			optionList.ScrollBarThickness = 3
+			optionList.Position = UDim2.fromOffset(4, 34)
+			optionList.Size = UDim2.new(1, -8, 1, -38)
+			optionList.ZIndex = zIndex + 1
+			optionList.Parent = panel
+			local optionLayout = Instance.new("UIListLayout")
+			optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			optionLayout.Padding = UDim.new(0, 2)
+			optionLayout.Parent = optionList
+			local optionRefs = {}
+			local currentChoices = {}
+			local function refreshButton()
+				local count = selectionCount(selected)
+				if (name == "SellPetNames" or name == "SellPetRarity") and count > 0 then
+					local visible = {}
+					for _, choice in ipairs(currentChoices) do
+						if selected[choice] then table.insert(visible, choice) end
+					end
+					button.Text = table.concat(visible, ", ")
+				elseif name == "BlacklistPetVariant" and count > 0 then
+					local visible = {}
+					for _, choice in ipairs(currentChoices) do
+						if selected[choice] then table.insert(visible, choice) end
+					end
+					button.Text = #visible > 2 and (visible[1] .. ", " .. visible[2] .. ",...") or table.concat(visible, ", ")
+				else
+					button.Text = count == 0 and "Select Options" or (count == 1 and next(selected) or tostring(count) .. " Selected")
+				end
+			end
+			local function updateCanvas()
+				optionList.CanvasSize = UDim2.fromOffset(0, optionLayout.AbsoluteContentSize.Y)
+			end
+			function entry.rebuild(choices)
+				currentChoices = choices
+				for _, ref in ipairs(optionRefs) do ref.button:Destroy() end
+				table.clear(optionRefs)
+				for index, choice in ipairs(choices) do
+					local option = Instance.new("TextButton")
+					option.AutoButtonColor = false
+					option.Text = choice
+					option.Font = Enum.Font.GothamMedium
+					option.TextSize = 11
+					option.TextColor3 = palette.text
+					option.TextXAlignment = Enum.TextXAlignment.Left
+					option.BackgroundColor3 = selected[choice] and rgb(57, 22, 78) or rgb(18, 18, 25)
+					option.BorderSizePixel = 0
+					option.Size = UDim2.new(1, -3, 0, 27)
+					option.LayoutOrder = index
+					option.ZIndex = zIndex + 2
+					option.Parent = optionList
+					padding(option, 10, 0, 4, 0)
+					option.MouseButton1Click:Connect(function()
+						selected[choice] = not selected[choice] and true or nil
+						option.BackgroundColor3 = selected[choice] and rgb(57, 22, 78) or rgb(18, 18, 25)
+						refreshButton()
+					end)
+					table.insert(optionRefs, {button = option, choice = choice})
+				end
+				refreshButton()
+				updateCanvas()
+			end
+			search:GetPropertyChangedSignal("Text"):Connect(function()
+				local query = string.lower(search.Text)
+				for _, ref in ipairs(optionRefs) do
+					ref.button.Visible = query == "" or string.find(string.lower(ref.choice), query, 1, true) ~= nil
+				end
+				updateCanvas()
+			end)
+			optionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+			function entry.setOpen(open)
+				entry.open = open
+				panel.Size = UDim2.new(0.38, -7, 0, open and 160 or 0)
+				buttonArrow.Rotation = open and 180 or 0
+			end
+			button.MouseButton1Click:Connect(function()
+				closeFilters(entry)
+				entry.setOpen(not entry.open)
+			end)
+			refreshButton()
+			table.insert(filters, entry)
+			return entry
+		end
+
+		local namesFilter = makePetFilter("SellPetNames", "Sell Pet Names", "Choose pet names to sell from your inventory.", 0, selectedSellPetNames, 260)
+		local rarityFilter = makePetFilter("SellPetRarity", "Sell Pet Rarity", "Sell pets from these rarities.", 54, selectedSellPetRarities, 270)
+		namesFilter.rebuild(getInventoryPetNames())
+		rarityFilter.rebuild(rarityOptions)
+
+		local refreshButton = Instance.new("TextButton")
+		refreshButton.Name = "RefreshPetNamesButton"
+		refreshButton.AutoButtonColor = false
+		refreshButton.Text = "Refresh Pet Names"
+		refreshButton.Font = Enum.Font.GothamBold
+		refreshButton.TextSize = 11
+		refreshButton.TextColor3 = palette.text
+		refreshButton.BackgroundColor3 = rgb(28, 33, 28)
+		refreshButton.BorderSizePixel = 0
+		refreshButton.Position = UDim2.fromOffset(0, 108)
+		refreshButton.Size = UDim2.new(1, 0, 0, 40)
+		refreshButton.Parent = petContent
+		corner(refreshButton, 4)
+		refreshButton.MouseButton1Click:Connect(function()
+			namesFilter.rebuild(getInventoryPetNames())
+			refreshButton.Text = "Pet Names Refreshed"
+			task.delay(1, function()
+				if refreshButton.Parent then refreshButton.Text = "Refresh Pet Names" end
+			end)
+		end)
+
+		local advancedRow = Instance.new("Frame")
+		advancedRow.BackgroundColor3 = rgb(28, 20, 35)
+		advancedRow.BorderSizePixel = 0
+		advancedRow.Position = UDim2.fromOffset(0, 154)
+		advancedRow.Size = UDim2.new(1, 0, 0, 31)
+		advancedRow.Parent = petContent
+		corner(advancedRow, 3)
+		local advancedText = label(advancedRow, "- [ Advanced Filter ] -", 11, palette.text, true)
+		advancedText.Position = UDim2.fromOffset(10, 0)
+		advancedText.Size = UDim2.new(1, -20, 1, 0)
+
+		local variantFilter = makePetFilter("BlacklistPetVariant", "Blacklist Variant (Never Sell)", "Pets with these variants are never sold. Keep all selected for safety.", 191, blacklistedPetVariants, 280)
+		variantFilter.rebuild({"Big", "Huge", "Rainbow", "Mega"})
+
+		local delayRow = Instance.new("Frame")
+		delayRow.BackgroundColor3 = palette.card
+		delayRow.BorderSizePixel = 0
+		delayRow.Position = UDim2.fromOffset(0, 245)
+		delayRow.Size = UDim2.new(1, 0, 0, 48)
+		delayRow.Parent = petContent
+		corner(delayRow, 4)
+		local delayTitle = label(delayRow, "Sell Pet Delay", 12, palette.text, true)
+		delayTitle.Position = UDim2.fromOffset(10, 4)
+		delayTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local delayDescription = label(delayRow, "Wait time between each pet sale.", 10, palette.muted, false)
+		delayDescription.Position = UDim2.fromOffset(10, 21)
+		delayDescription.Size = UDim2.new(0.62, -10, 0, 20)
+		local delayInput = Instance.new("TextBox")
+		delayInput.Name = "SellPetDelayInput"
+		delayInput.ClearTextOnFocus = false
+		delayInput.Text = tostring(sellPetDelay)
+		delayInput.Font = Enum.Font.GothamMedium
+		delayInput.TextSize = 11
+		delayInput.TextColor3 = palette.text
+		delayInput.TextXAlignment = Enum.TextXAlignment.Left
+		delayInput.BackgroundColor3 = rgb(31, 26, 43)
+		delayInput.BorderSizePixel = 0
+		delayInput.Position = UDim2.new(0.62, 0, 0, 8)
+		delayInput.Size = UDim2.new(0.38, -7, 0, 32)
+		delayInput.Parent = delayRow
+		corner(delayInput, 4)
+		stroke(delayInput, rgb(125, 49, 166), 0.2, 1)
+		padding(delayInput, 8, 0, 8, 0)
+		local function commitDelay()
+			local normalized = string.gsub(delayInput.Text, ",", ".")
+			sellPetDelay = math.clamp(tonumber(normalized) or 0.5, 0.05, 60)
+			delayInput.Text = tostring(sellPetDelay)
+			screenGui:SetAttribute("SellPetDelay", sellPetDelay)
+		end
+		delayInput.FocusLost:Connect(commitDelay)
+
+		local startRow = Instance.new("Frame")
+		startRow.BackgroundColor3 = palette.card
+		startRow.BorderSizePixel = 0
+		startRow.Position = UDim2.fromOffset(0, 299)
+		startRow.Size = UDim2.new(1, 0, 0, 48)
+		startRow.Parent = petContent
+		corner(startRow, 4)
+		local startTitle = label(startRow, "Start Sell Pet", 12, palette.text, true)
+		startTitle.Position = UDim2.fromOffset(10, 4)
+		startTitle.Size = UDim2.new(0.76, -10, 0, 18)
+		local startDescription = label(startRow, "Sells matching pets. Blacklisted variants are always kept.", 10, palette.muted, false)
+		startDescription.Position = UDim2.fromOffset(10, 21)
+		startDescription.Size = UDim2.new(0.76, -10, 0, 20)
+		local startToggle = Instance.new("TextButton")
+		startToggle.Name = "StartSellPetToggle"
+		startToggle.AutoButtonColor = false
+		startToggle.Text = ""
+		startToggle.BackgroundColor3 = autoSellPetEnabled and palette.accent or rgb(48, 46, 58)
+		startToggle.BorderSizePixel = 0
+		startToggle.Position = UDim2.new(1, -50, 0.5, -11)
+		startToggle.Size = UDim2.fromOffset(38, 22)
+		startToggle.Parent = startRow
+		corner(startToggle, 11)
+		stroke(startToggle, rgb(116, 70, 152), autoSellPetEnabled and 0.15 or 0.45, 1)
+		local startKnob = Instance.new("Frame")
+		startKnob.BackgroundColor3 = rgb(239, 239, 243)
+		startKnob.BorderSizePixel = 0
+		startKnob.Position = autoSellPetEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3)
+		startKnob.Size = UDim2.fromOffset(16, 16)
+		startKnob.Parent = startToggle
+		corner(startKnob, 8)
+		startToggle.MouseButton1Click:Connect(function()
+			commitDelay()
+			autoSellPetEnabled = not autoSellPetEnabled
+			autoSellPetRunId += 1
+			if autoSellPetEnabled then
+				screenGui:SetAttribute("AutoSellPetStatus", "Checking inventory")
+				runAutoSellPet(autoSellPetRunId)
+			else
+				screenGui:SetAttribute("AutoSellPetStatus", "Stopped")
+			end
+			screenGui:SetAttribute("AutoSellPetEnabled", autoSellPetEnabled)
+			TweenService:Create(startToggle, TweenInfo.new(0.18), {
+				BackgroundColor3 = autoSellPetEnabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(startKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = autoSellPetEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+		end)
+
+		local categoryOpen = false
+		petHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then closeFilters() end
+			TweenService:Create(petContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 403 or 0),
+			}):Play()
+			TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("SellPetDelay", sellPetDelay)
+		screenGui:SetAttribute("AutoSellPetEnabled", autoSellPetEnabled)
+		screenGui:SetAttribute("BlacklistedPetVariants", "Big,Huge,Rainbow,Mega")
+	end
+	createAutoSellPetSection()
+	end
+
+	do
+	local function createAutoLeaveWeatherSection()
+		local weatherOptions = {"Rain", "Lightning", "Rainbow", "Snowfall", "Starfall", "Aurora", "Sunburst", "Eclipse"}
+		local weatherValues = ReplicatedStorage:FindFirstChild("WeatherValues")
+
+		local weatherHeader = Instance.new("TextButton")
+		weatherHeader.Name = "AutoLeaveWeatherHeader"
+		weatherHeader.AutoButtonColor = false
+		weatherHeader.Text = ""
+		weatherHeader.BackgroundColor3 = palette.card
+		weatherHeader.BorderSizePixel = 0
+		weatherHeader.Size = UDim2.new(1, 0, 0, 31)
+		weatherHeader.LayoutOrder = 22
+		weatherHeader.Parent = list
+		corner(weatherHeader, 4)
+		local headerText = label(weatherHeader, "Auto Leave Weather", 13, palette.text, true)
+		headerText.Position = UDim2.fromOffset(10, 0)
+		headerText.Size = UDim2.new(1, -40, 1, 0)
+		local headerArrow = label(weatherHeader, "v", 14, rgb(210, 210, 216), true)
+		headerArrow.Position = UDim2.new(1, -28, 0, 0)
+		headerArrow.Size = UDim2.fromOffset(20, 31)
+		headerArrow.TextXAlignment = Enum.TextXAlignment.Center
+		local headerAccent = Instance.new("Frame")
+		headerAccent.BackgroundColor3 = palette.accent
+		headerAccent.BorderSizePixel = 0
+		headerAccent.Position = UDim2.new(0, 0, 1, -2)
+		headerAccent.Size = UDim2.new(1, 0, 0, 2)
+		headerAccent.Parent = weatherHeader
+
+		local weatherContent = Instance.new("Frame")
+		weatherContent.Name = "AutoLeaveWeatherContent"
+		weatherContent.BackgroundTransparency = 1
+		weatherContent.BorderSizePixel = 0
+		weatherContent.ClipsDescendants = true
+		weatherContent.Size = UDim2.new(1, 0, 0, 0)
+		weatherContent.LayoutOrder = 23
+		weatherContent.Parent = list
+
+		local selectRow = Instance.new("Frame")
+		selectRow.BackgroundColor3 = palette.card
+		selectRow.BorderSizePixel = 0
+		selectRow.Position = UDim2.fromOffset(0, 0)
+		selectRow.Size = UDim2.new(1, 0, 0, 58)
+		selectRow.Parent = weatherContent
+		corner(selectRow, 4)
+		local selectTitle = label(selectRow, "Leave If Weather", 12, palette.text, true)
+		selectTitle.Position = UDim2.fromOffset(10, 4)
+		selectTitle.Size = UDim2.new(0.62, -10, 0, 18)
+		local selectDescription = label(selectRow, "If one of these weathers is running, you get kicked with a Yupisotes alert message.", 10, palette.muted, false)
+		selectDescription.Position = UDim2.fromOffset(10, 21)
+		selectDescription.Size = UDim2.new(0.62, -10, 0, 31)
+		selectDescription.TextWrapped = true
+
+		local selectButton = Instance.new("TextButton")
+		selectButton.Name = "LeaveWeatherSelectButton"
+		selectButton.AutoButtonColor = false
+		selectButton.Font = Enum.Font.GothamBold
+		selectButton.TextSize = 11
+		selectButton.TextColor3 = palette.muted
+		selectButton.TextXAlignment = Enum.TextXAlignment.Left
+		selectButton.TextTruncate = Enum.TextTruncate.AtEnd
+		selectButton.BackgroundColor3 = rgb(31, 26, 43)
+		selectButton.BorderSizePixel = 0
+		selectButton.Position = UDim2.new(0.62, 0, 0, 10)
+		selectButton.Size = UDim2.new(0.38, -7, 0, 32)
+		selectButton.Parent = selectRow
+		corner(selectButton, 4)
+		stroke(selectButton, rgb(72, 48, 96), 0.45, 1)
+		padding(selectButton, 10, 0, 30, 0)
+		local selectArrow = label(selectButton, "v", 13, rgb(210, 210, 216), true)
+		selectArrow.Position = UDim2.new(1, -30, 0, 0)
+		selectArrow.Size = UDim2.fromOffset(20, 32)
+		selectArrow.TextXAlignment = Enum.TextXAlignment.Center
+
+		local selectPanel = Instance.new("Frame")
+		selectPanel.Name = "LeaveWeatherDropdown"
+		selectPanel.BackgroundColor3 = rgb(18, 18, 25)
+		selectPanel.BorderSizePixel = 0
+		selectPanel.ClipsDescendants = true
+		selectPanel.Position = UDim2.new(0.62, 0, 0, 54)
+		selectPanel.Size = UDim2.new(0.38, -7, 0, 0)
+		selectPanel.ZIndex = 300
+		selectPanel.Parent = weatherContent
+		corner(selectPanel, 4)
+		stroke(selectPanel, rgb(91, 39, 124), 0.1, 1)
+
+		local search = Instance.new("TextBox")
+		search.Name = "LeaveWeatherSearch"
+		search.ClearTextOnFocus = false
+		search.PlaceholderText = "Search"
+		search.Text = ""
+		search.Font = Enum.Font.GothamMedium
+		search.TextSize = 11
+		search.TextColor3 = palette.text
+		search.PlaceholderColor3 = palette.muted
+		search.BackgroundColor3 = rgb(35, 27, 48)
+		search.BorderSizePixel = 0
+		search.Position = UDim2.fromOffset(4, 4)
+		search.Size = UDim2.new(1, -8, 0, 26)
+		search.ZIndex = 301
+		search.Parent = selectPanel
+		corner(search, 3)
+
+		local optionList = Instance.new("ScrollingFrame")
+		optionList.BackgroundTransparency = 1
+		optionList.BorderSizePixel = 0
+		optionList.CanvasSize = UDim2.fromOffset(0, 0)
+		optionList.ScrollBarImageColor3 = palette.accent
+		optionList.ScrollBarThickness = 3
+		optionList.Position = UDim2.fromOffset(4, 34)
+		optionList.Size = UDim2.new(1, -8, 1, -38)
+		optionList.ZIndex = 301
+		optionList.Parent = selectPanel
+		local optionLayout = Instance.new("UIListLayout")
+		optionLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		optionLayout.Padding = UDim.new(0, 2)
+		optionLayout.Parent = optionList
+
+		local optionButtons = {}
+		local function selectedWeatherText()
+			local names = {}
+			for _, weatherName in ipairs(weatherOptions) do
+				if selectedLeaveWeathers[weatherName] then table.insert(names, weatherName) end
+			end
+			return names
+		end
+		local function refreshSummary()
+			local names = selectedWeatherText()
+			selectButton.Text = #names == 0 and "Select Options" or table.concat(names, ", ")
+			selectButton.TextColor3 = #names == 0 and palette.muted or palette.text
+			screenGui:SetAttribute("SelectedLeaveWeathers", table.concat(names, ","))
+		end
+		local function updateCanvas()
+			optionList.CanvasSize = UDim2.fromOffset(0, optionLayout.AbsoluteContentSize.Y)
+		end
+		for index, weatherName in ipairs(weatherOptions) do
+			local option = Instance.new("TextButton")
+			option.AutoButtonColor = false
+			option.Text = weatherName
+			option.Font = Enum.Font.GothamMedium
+			option.TextSize = 11
+			option.TextXAlignment = Enum.TextXAlignment.Left
+			option.BorderSizePixel = 0
+			option.Size = UDim2.new(1, -3, 0, 27)
+			option.LayoutOrder = index
+			option.ZIndex = 302
+			option.Parent = optionList
+			corner(option, 3)
+			padding(option, 10, 0, 0, 0)
+			local function renderOption()
+				local selected = selectedLeaveWeathers[weatherName] == true
+				option.TextColor3 = selected and rgb(221, 154, 255) or palette.text
+				option.BackgroundColor3 = selected and rgb(48, 28, 64) or rgb(17, 18, 24)
+				option.BackgroundTransparency = selected and 0.1 or 0.35
+			end
+			renderOption()
+			option.MouseButton1Click:Connect(function()
+				selectedLeaveWeathers[weatherName] = not selectedLeaveWeathers[weatherName] and true or nil
+				renderOption()
+				refreshSummary()
+			end)
+			table.insert(optionButtons, option)
+		end
+		refreshSummary()
+		updateCanvas()
+		optionLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+		search:GetPropertyChangedSignal("Text"):Connect(function()
+			local query = string.lower(search.Text)
+			for _, option in ipairs(optionButtons) do
+				option.Visible = query == "" or string.find(string.lower(option.Text), query, 1, true) ~= nil
+			end
+			optionList.CanvasPosition = Vector2.zero
+			updateCanvas()
+		end)
+
+		local startRow = Instance.new("Frame")
+		startRow.BackgroundColor3 = palette.card
+		startRow.BorderSizePixel = 0
+		startRow.Position = UDim2.fromOffset(0, 64)
+		startRow.Size = UDim2.new(1, 0, 0, 48)
+		startRow.Parent = weatherContent
+		corner(startRow, 4)
+		local startTitle = label(startRow, "Start Auto Leave Weather", 12, palette.text, true)
+		startTitle.Position = UDim2.fromOffset(10, 4)
+		startTitle.Size = UDim2.new(0.76, -10, 0, 18)
+		local startDescription = label(startRow, "Checks the running weather and leaves the server when it matches.", 10, palette.muted, false)
+		startDescription.Position = UDim2.fromOffset(10, 21)
+		startDescription.Size = UDim2.new(0.76, -10, 0, 20)
+
+		local startToggle = Instance.new("TextButton")
+		startToggle.Name = "StartAutoLeaveWeatherToggle"
+		startToggle.AutoButtonColor = false
+		startToggle.Text = ""
+		startToggle.BackgroundColor3 = rgb(48, 46, 58)
+		startToggle.BorderSizePixel = 0
+		startToggle.Position = UDim2.new(1, -50, 0.5, -11)
+		startToggle.Size = UDim2.fromOffset(38, 22)
+		startToggle.Parent = startRow
+		corner(startToggle, 11)
+		stroke(startToggle, rgb(116, 70, 152), 0.45, 1)
+		local startKnob = Instance.new("Frame")
+		startKnob.BackgroundColor3 = rgb(239, 239, 243)
+		startKnob.BorderSizePixel = 0
+		startKnob.Position = UDim2.fromOffset(3, 3)
+		startKnob.Size = UDim2.fromOffset(16, 16)
+		startKnob.Parent = startToggle
+		corner(startKnob, 8)
+
+		local function activeSelectedWeather()
+			weatherValues = weatherValues or ReplicatedStorage:FindFirstChild("WeatherValues")
+			if not weatherValues then return nil end
+			for _, weatherName in ipairs(weatherOptions) do
+				if selectedLeaveWeathers[weatherName] and weatherValues:GetAttribute(weatherName .. "_Playing") == true then
+					return weatherName
+				end
+			end
+			return nil
+		end
+		local function runAutoLeaveWeather(runId)
+			local generation = autoPlantGeneration
+			task.spawn(function()
+				while autoLeaveWeatherEnabled and autoLeaveWeatherRunId == runId
+					and runtime.YupisotesGeneration == generation and screenGui.Parent do
+					local weatherName = activeSelectedWeather()
+					if weatherName then
+						screenGui:SetAttribute("AutoLeaveWeatherStatus", "Leaving: " .. weatherName)
+						task.wait(0.15)
+						player:Kick("[Yupisotes] Auto Leave Weather: " .. weatherName .. " is active.")
+						return
+					end
+					screenGui:SetAttribute("AutoLeaveWeatherStatus", "Watching selected weather")
+					task.wait(0.5)
+				end
+			end)
+		end
+
+		startToggle.MouseButton1Click:Connect(function()
+			if not autoLeaveWeatherEnabled and #selectedWeatherText() == 0 then
+				screenGui:SetAttribute("AutoLeaveWeatherStatus", "Select at least one weather")
+				return
+			end
+			autoLeaveWeatherEnabled = not autoLeaveWeatherEnabled
+			autoLeaveWeatherRunId += 1
+			screenGui:SetAttribute("AutoLeaveWeatherEnabled", autoLeaveWeatherEnabled)
+			TweenService:Create(startToggle, TweenInfo.new(0.18), {
+				BackgroundColor3 = autoLeaveWeatherEnabled and palette.accent or rgb(48, 46, 58),
+			}):Play()
+			TweenService:Create(startKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = autoLeaveWeatherEnabled and UDim2.fromOffset(19, 3) or UDim2.fromOffset(3, 3),
+			}):Play()
+			if autoLeaveWeatherEnabled then
+				runAutoLeaveWeather(autoLeaveWeatherRunId)
+			else
+				screenGui:SetAttribute("AutoLeaveWeatherStatus", "Stopped")
+			end
+		end)
+
+		local categoryOpen = false
+		local dropdownOpen = false
+		selectButton.MouseButton1Click:Connect(function()
+			dropdownOpen = not dropdownOpen
+			selectPanel.Size = UDim2.new(0.38, -7, 0, dropdownOpen and 160 or 0)
+			selectArrow.Rotation = dropdownOpen and 180 or 0
+		end)
+		weatherHeader.MouseButton1Click:Connect(function()
+			categoryOpen = not categoryOpen
+			if not categoryOpen then
+				dropdownOpen = false
+				selectPanel.Size = UDim2.new(0.38, -7, 0, 0)
+				selectArrow.Rotation = 0
+			end
+			TweenService:Create(weatherContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, 0, 0, categoryOpen and 220 or 0),
+			}):Play()
+			TweenService:Create(headerArrow, TweenInfo.new(0.18), {
+				Rotation = categoryOpen and 180 or 0,
+			}):Play()
+		end)
+
+		screenGui:SetAttribute("AutoLeaveWeatherEnabled", autoLeaveWeatherEnabled)
+		screenGui:SetAttribute("AutoLeaveWeatherStatus", "Stopped")
+	end
+	createAutoLeaveWeatherSection()
 	end
 
 	selectButton.MouseButton1Click:Connect(function()
