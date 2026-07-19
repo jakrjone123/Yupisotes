@@ -7148,13 +7148,17 @@ runtime.YupisotesShowShop = function()
 		if aOrder == bOrder then return a < b end
 		return aOrder < bOrder
 	end)
+	table.insert(shopSeeds, 1, "Buy All Fruit")
 
 	local function selectedTargets()
 		local targets = {}
 		local useRarity = selectionCount(state.selectedRarities) > 0
+		local buyAllFruit = state.selectedSeeds["Buy All Fruit"] == true
 		for _, seedName in ipairs(shopSeeds) do
-			local selected = useRarity and state.selectedRarities[seedRarities[seedName]] or state.selectedSeeds[seedName]
-			if selected then table.insert(targets, seedName) end
+			if seedName ~= "Buy All Fruit" then
+				local selected = buyAllFruit or (useRarity and state.selectedRarities[seedRarities[seedName]] or state.selectedSeeds[seedName])
+				if selected then table.insert(targets, seedName) end
+			end
 		end
 		return targets
 	end
@@ -7491,50 +7495,12 @@ runtime.YupisotesShowShop = function()
 	end
 
 	createToggle("AlwaysBuySeedsIfRestockToggle", "Always Buy Seeds If Restock", "Keeps buying your selected seeds while stock is available.", 188, "alwaysEnabled")
-	local buyAllFruitButton = Instance.new("TextButton")
-	buyAllFruitButton.Name = "BuyAllFruitButton"
-	buyAllFruitButton.AutoButtonColor = true
-	buyAllFruitButton.Text = "Buy All Fruit"
-	buyAllFruitButton.Font = Enum.Font.GothamBold
-	buyAllFruitButton.TextSize = 11
-	buyAllFruitButton.TextColor3 = palette.text
-	buyAllFruitButton.BackgroundColor3 = rgb(30, 35, 30)
-	buyAllFruitButton.BorderSizePixel = 0
-	buyAllFruitButton.Position = UDim2.fromOffset(0, 242)
-	buyAllFruitButton.Size = UDim2.new(1, 0, 0, 34)
-	buyAllFruitButton.Parent = shopContent
-	corner(buyAllFruitButton, 4)
-	buyAllFruitButton.MouseButton1Click:Connect(function()
-		if runtime.YupisotesBuyAllFruitBusy then return end
-		runtime.YupisotesBuyAllFruitBusy = true
-		buyAllFruitButton.Text = "Buying available fruit..."
-		task.spawn(function()
-			local requested = 0
-			for _, seedName in ipairs(shopSeeds) do
-				local stockValue = stockItems:FindFirstChild(seedName)
-				local available = stockValue and math.clamp(math.floor(tonumber(stockValue.Value) or 0), 0, 999) or 0
-				for _ = 1, available do
-					if not screenGui.Parent then break end
-					local ok = pcall(function() networking.SeedShop.PurchaseSeed:Fire(seedName) end)
-					if ok then
-						requested += 1
-						screenGui:SetAttribute("LastAutoBoughtSeed", seedName)
-					end
-					task.wait(0.14)
-				end
-			end
-			runtime.YupisotesBuyAllFruitBusy = false
-			if buyAllFruitButton.Parent then buyAllFruitButton.Text = "Buy All Fruit" end
-			screenGui:SetAttribute("AutoBuySeedsStatus", requested > 0 and ("Requested all stock: " .. requested) or "No fruit in stock")
-		end)
-	end)
-
 	local categoryOpen = false
 	shopHeader.MouseButton1Click:Connect(function()
 		categoryOpen = not categoryOpen
 		if not categoryOpen then closeFilters() end
 		TweenService:Create(shopContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(1, 0, 0, categoryOpen and 285 or 0),
+			Size = UDim2.new(1, 0, 0, categoryOpen and 251 or 0),
 		}):Play()
 		TweenService:Create(headerArrow, TweenInfo.new(0.18), {
 			Rotation = categoryOpen and 180 or 0,
