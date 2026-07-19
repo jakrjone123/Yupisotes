@@ -4,6 +4,9 @@ local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local runtime = (getgenv and getgenv()) or _G
+if runtime.YupisotesSyntaxCheckOnly then
+return
+end
 runtime.YupisotesGeneration = (runtime.YupisotesGeneration or 0) + 1
 if runtime.YupisotesToggleDragChanged then runtime.YupisotesToggleDragChanged:Disconnect() end
 if runtime.YupisotesToggleDragEnded then runtime.YupisotesToggleDragEnded:Disconnect() end
@@ -1274,6 +1277,13 @@ local harvestMutationOptions = {
 local networking = require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Networking"))
 local petData = require(ReplicatedStorage:WaitForChild("SharedData"):WaitForChild("PetData"))
 local seedData = require(ReplicatedStorage.SharedModules:WaitForChild("SeedData"))
+if runtime.YupisotesTrowelRejectedConnection then
+pcall(function() runtime.YupisotesTrowelRejectedConnection:Disconnect() end)
+end
+runtime.YupisotesTrowelRejected = {}
+runtime.YupisotesTrowelRejectedConnection = networking.Trowel.MoveRejected.OnClientEvent:Connect(function(plantId)
+runtime.YupisotesTrowelRejected[tostring(plantId)] = os.clock()
+end)
 runtime.YupisotesGearShopData = require(ReplicatedStorage.SharedModules:WaitForChild("GearShopData"))
 runtime.YupisotesCrateData = require(ReplicatedStorage.SharedModules:WaitForChild("CrateData"))
 local seedRarities = {}
@@ -2208,15 +2218,30 @@ for _, target in ipairs(targets) do
 if not autoTrowelEnabled or autoTrowelRunId ~= runId then break end
 local destination = resolveTrowelPosition(plot)
 if destination then
-local _, rotationY = target.model:GetPivot():ToEulerAnglesYXZ()
+local originalPosition = target.model:GetPivot().Position
+local rotationY = select(1, target.model:GetPivot():ToEulerAnglesYXZ())
 trowelPending[target.id] = os.clock() + math.max(2, trowelDelay + 1)
+runtime.YupisotesTrowelRejected[tostring(target.id)] = nil
 local ok = pcall(function()
 networking.Trowel.MovePlant:Fire(target.id, destination, math.deg(rotationY))
 end)
-if ok then
+local confirmed = false
+local deadline = os.clock() + 1.25
+while ok and os.clock() < deadline do
+if runtime.YupisotesTrowelRejected[tostring(target.id)] then break end
+if not target.model.Parent or (target.model:GetPivot().Position - originalPosition).Magnitude > 1 then
+confirmed = true
+break
+end
+task.wait(0.05)
+end
+if confirmed then
 moved += 1
 screenGui:SetAttribute("LastTroweledPlant", target.name)
 screenGui:SetAttribute("LastTrowelPosition", tostring(destination))
+else
+trowelPending[target.id] = os.clock() + 0.35
+screenGui:SetAttribute("AutoTrowelStatus", runtime.YupisotesTrowelRejected[tostring(target.id)] and "Move rejected; retrying" or "Move not confirmed; retrying")
 end
 else
 screenGui:SetAttribute("AutoTrowelStatus", "No valid plot position")
@@ -2249,7 +2274,7 @@ local folder = map and map:FindFirstChild("SeedPackSpawnServerLocations")
 local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 local targets = {}
 if not folder or not root then return targets end
-for _, item in ipairs(folder:GetDescendants()) do
+for _, item in ipairs(folder:GetChildren()) do
 if item:IsA("BasePart") then
 local seedName = getDroppedSeedName(item)
 local special = isSpecialDroppedSeed(item)
@@ -2270,112 +2295,44 @@ return targets
 end
 local function touchDroppedSeed(root, part)
 if not root or not root.Parent or not part or not part.Parent then return false end
-local original = root.CFrame
-local seedFolder = part:FindFirstAncestor("SeedPackSpawnServerLocations")
 local character = player.Character
-local touchParts = {}
-local prompts = {}
-local clickDetectors = {}
-local seenTouchParts = {}
-local seenPrompts = {}
-local seenClicks = {}
-local function worldPosition(instance)
-if instance:IsA("BasePart") then return instance.Position end
-if instance:IsA("Attachment") then return instance.WorldPosition end
-local parentPart = instance:FindFirstAncestorWhichIsA("BasePart")
-return parentPart and parentPart.Position or nil
-end
-local function addNearbyInteraction(instance)
-local position = worldPosition(instance)
-if not position or (position - part.Position).Magnitude > 14 then return end
-if instance:IsA("BasePart") and not seenTouchParts[instance] then
-seenTouchParts[instance] = true
-table.insert(touchParts, instance)
-elseif instance:IsA("ProximityPrompt") and not seenPrompts[instance] then
-seenPrompts[instance] = true
-table.insert(prompts, instance)
-elseif instance:IsA("ClickDetector") and not seenClicks[instance] then
-seenClicks[instance] = true
-table.insert(clickDetectors, instance)
-end
-end
-addNearbyInteraction(part)
-for _, instance in ipairs(part:GetDescendants()) do addNearbyInteraction(instance) end
-if seedFolder then
-for _, instance in ipairs(seedFolder:GetDescendants()) do
-if instance:IsA("ProximityPrompt") or instance:IsA("ClickDetector") or instance:IsA("BasePart") then
-addNearbyInteraction(instance)
-end
-end
-end
+if not character then return false end
+local original = character:GetPivot()
 local characterParts = {}
-if character then
 for _, characterPart in ipairs(character:GetDescendants()) do
 if characterPart:IsA("BasePart") then table.insert(characterParts, characterPart) end
-end
 end
 local ok = pcall(function()
 root.AssemblyLinearVelocity = Vector3.zero
 root.AssemblyAngularVelocity = Vector3.zero
-root.CFrame = part.CFrame * CFrame.new(0, 2.5, 0)
-task.wait(0.08)
-local deadline = os.clock() + 1.8
+character:PivotTo(part.CFrame * CFrame.new(0, 4, 0))
+task.wait(0.1)
+local deadline = os.clock() + 2.8
 while part.Parent and getDroppedSeedName(part) ~= nil and os.clock() < deadline do
-for _, prompt in ipairs(prompts) do
-if prompt.Parent and prompt.Enabled then
-pcall(function()
-prompt.HoldDuration = 0
-prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 100)
-prompt.RequiresLineOfSight = false
-end)
-if fireproximityprompt then pcall(fireproximityprompt, prompt, 0) end
-pcall(function()
-prompt:InputHoldBegin()
-task.wait(0.025)
-prompt:InputHoldEnd()
-end)
-end
-end
-for _, detector in ipairs(clickDetectors) do
-if detector.Parent and fireclickdetector then pcall(fireclickdetector, detector) end
-end
-if #prompts > 0 then
-pcall(function()
-local virtualInput = game:GetService("VirtualInputManager")
-virtualInput:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-task.wait(0.025)
-virtualInput:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-end)
-end
 if firetouchinterest then
 for _, characterPart in ipairs(characterParts) do
 if characterPart.Parent then
-for _, targetPart in ipairs(touchParts) do
-if targetPart.Parent then
-pcall(firetouchinterest, characterPart, targetPart, 0)
-pcall(firetouchinterest, characterPart, targetPart, 1)
+pcall(firetouchinterest, characterPart, part, 0)
+pcall(firetouchinterest, characterPart, part, 1)
 end
 end
 end
-end
-end
-root.CFrame = part.CFrame * CFrame.new(0, -1.25, 0)
-task.wait(0.055)
-root.CFrame = part.CFrame * CFrame.new(0, 1.25, 0)
-task.wait(0.055)
+character:PivotTo(part.CFrame * CFrame.new(0, 0.35, 0))
+root.AssemblyLinearVelocity = Vector3.new(0, -24, 0)
+task.wait(0.09)
+character:PivotTo(part.CFrame * CFrame.new(0, -1.1, 0))
+task.wait(0.09)
+character:PivotTo(part.CFrame * CFrame.new(0, 0.8, 0))
+task.wait(0.09)
 end
 end)
-if root.Parent then
+if character.Parent and root.Parent then
 root.AssemblyLinearVelocity = Vector3.zero
 root.AssemblyAngularVelocity = Vector3.zero
-root.CFrame = original
+character:PivotTo(original)
 end
 if not ok then return false end
-if not part.Parent or getDroppedSeedName(part) == nil then return true end
-for _, prompt in ipairs(prompts) do
-if not prompt.Parent or not prompt.Enabled then return true end
-end
-return false
+return not part.Parent or getDroppedSeedName(part) == nil
 end
 local function runAutoCollectDroppedSeed(runId)
 local myGeneration = autoPlantGeneration
@@ -7534,13 +7491,50 @@ runtime.YupisotesShowShop = function()
 	end
 
 	createToggle("AlwaysBuySeedsIfRestockToggle", "Always Buy Seeds If Restock", "Keeps buying your selected seeds while stock is available.", 188, "alwaysEnabled")
+	local buyAllFruitButton = Instance.new("TextButton")
+	buyAllFruitButton.Name = "BuyAllFruitButton"
+	buyAllFruitButton.AutoButtonColor = true
+	buyAllFruitButton.Text = "Buy All Fruit"
+	buyAllFruitButton.Font = Enum.Font.GothamBold
+	buyAllFruitButton.TextSize = 11
+	buyAllFruitButton.TextColor3 = palette.text
+	buyAllFruitButton.BackgroundColor3 = rgb(30, 35, 30)
+	buyAllFruitButton.BorderSizePixel = 0
+	buyAllFruitButton.Position = UDim2.fromOffset(0, 242)
+	buyAllFruitButton.Size = UDim2.new(1, 0, 0, 34)
+	buyAllFruitButton.Parent = shopContent
+	corner(buyAllFruitButton, 4)
+	buyAllFruitButton.MouseButton1Click:Connect(function()
+		if runtime.YupisotesBuyAllFruitBusy then return end
+		runtime.YupisotesBuyAllFruitBusy = true
+		buyAllFruitButton.Text = "Buying available fruit..."
+		task.spawn(function()
+			local requested = 0
+			for _, seedName in ipairs(shopSeeds) do
+				local stockValue = stockItems:FindFirstChild(seedName)
+				local available = stockValue and math.clamp(math.floor(tonumber(stockValue.Value) or 0), 0, 999) or 0
+				for _ = 1, available do
+					if not screenGui.Parent then break end
+					local ok = pcall(function() networking.SeedShop.PurchaseSeed:Fire(seedName) end)
+					if ok then
+						requested += 1
+						screenGui:SetAttribute("LastAutoBoughtSeed", seedName)
+					end
+					task.wait(0.14)
+				end
+			end
+			runtime.YupisotesBuyAllFruitBusy = false
+			if buyAllFruitButton.Parent then buyAllFruitButton.Text = "Buy All Fruit" end
+			screenGui:SetAttribute("AutoBuySeedsStatus", requested > 0 and ("Requested all stock: " .. requested) or "No fruit in stock")
+		end)
+	end)
 
 	local categoryOpen = false
 	shopHeader.MouseButton1Click:Connect(function()
 		categoryOpen = not categoryOpen
 		if not categoryOpen then closeFilters() end
 		TweenService:Create(shopContent, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(1, 0, 0, categoryOpen and 251 or 0),
+			Size = UDim2.new(1, 0, 0, categoryOpen and 285 or 0),
 		}):Play()
 		TweenService:Create(headerArrow, TweenInfo.new(0.18), {
 			Rotation = categoryOpen and 180 or 0,
@@ -9074,35 +9068,48 @@ runtime.YupisotesShowPet = function()
 		if not rootPart or not targetPart or not targetPart:IsA("BasePart") or not model.Parent then
 			return false
 		end
-		local originalCFrame = rootPart.CFrame
+		local originalCFrame = character:GetPivot()
 		local originalHoldDuration = prompt.HoldDuration
+		local map = workspace:FindFirstChild("Map")
+		local refs = map and map:FindFirstChild("WildPetRef")
+		local petId = model.Name:match("WildPet_([%x%-]+)$")
+		local serverRef = petId and refs and refs:FindFirstChild("WildPet_" .. petId)
 		local success = false
 		local ok = pcall(function()
 			local focused = UserInputService:GetFocusedTextBox()
 			if focused then focused:ReleaseFocus() end
 			rootPart.AssemblyLinearVelocity = Vector3.zero
 			rootPart.AssemblyAngularVelocity = Vector3.zero
-			rootPart.CFrame = targetPart.CFrame * CFrame.new(0, 0, -2)
+			character:PivotTo(targetPart.CFrame * CFrame.new(0, 0, -2))
 			task.wait(0.08)
 			prompt.HoldDuration = 0
+			if serverRef then
+				networking.Pets.WildPetTame:Fire(serverRef)
+			end
+			if fireproximityprompt then pcall(fireproximityprompt, prompt, 0) end
 			local virtualInput = game:GetService("VirtualInputManager")
 			virtualInput:SendKeyEvent(true, Enum.KeyCode.E, false, game)
 			task.wait(0.03)
 			virtualInput:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-			local deadline = os.clock() + 0.75
+			local deadline = os.clock() + 2
 			while model.Parent and prompt.Parent and prompt.Enabled and os.clock() < deadline do
-				rootPart.CFrame = targetPart.CFrame * CFrame.new(0, 0, -2)
+				if serverRef and serverRef.Parent and tonumber(serverRef:GetAttribute("OwnerUserId")) == player.UserId then
+					success = true
+					break
+				end
+				character:PivotTo(targetPart.CFrame * CFrame.new(0, 0, -2))
 				task.wait(0.05)
 			end
-			success = not model.Parent or not prompt.Parent or not prompt.Enabled
+			success = success or not model.Parent or not prompt.Parent or not prompt.Enabled
+				or (serverRef and (not serverRef.Parent or tonumber(serverRef:GetAttribute("OwnerUserId")) == player.UserId))
 		end)
 		if prompt.Parent then
 			pcall(function() prompt.HoldDuration = originalHoldDuration end)
 		end
-		if rootPart.Parent then
+		if character.Parent and rootPart.Parent then
 			rootPart.AssemblyLinearVelocity = Vector3.zero
 			rootPart.AssemblyAngularVelocity = Vector3.zero
-			rootPart.CFrame = originalCFrame
+			character:PivotTo(originalCFrame)
 		end
 		return ok and success
 	end
@@ -10279,14 +10286,18 @@ runtime.YupisotesShowMisc = function()
 		mailboxCatalog = require(controller:WaitForChild("MailboxItemCatalog"))
 	end)
 	local equippedPetIds = {}
-	pcall(function()
+	local function refreshEquippedPetIds()
+		table.clear(equippedPetIds)
+		pcall(function()
 		local equipped = networking.Pets.GetEquippedPets:Fire()
 		if typeof(equipped) == "table" then
 			for _, pet in ipairs(equipped) do if typeof(pet) == "table" and typeof(pet.Id) == "string" then equippedPetIds[pet.Id] = true end end
 		end
-	end)
+		end)
+	end
+	refreshEquippedPetIds()
 	local function mailboxInventory()
-		local replica = playerStateClient:GetLocalReplica()
+		local replica = playerStateClient:GetLocalReplica() or playerStateClient:WaitForLocalReplica()
 		return replica and replica.Data and replica.Data.Inventory or {}
 	end
 	local function mailboxDisplay(category, itemKey, payload)
@@ -10408,11 +10419,13 @@ runtime.YupisotesShowMisc = function()
 	receiverInput.FocusLost:Connect(function() state.mailReceiver = receiverInput.Text:match("^%s*(.-)%s*$") or "" end)
 	local mailItemsDropdown
 	local function refreshMailItemChoices()
+		refreshEquippedPetIds()
 		local refreshedChoices = collectMailItemChoices()
 		for selected in pairs(state.mailItems) do
 			if not table.find(refreshedChoices, selected) then state.mailItems[selected] = nil end
 		end
 		if mailItemsDropdown then mailItemsDropdown.setChoices(refreshedChoices) end
+		return #refreshedChoices
 	end
 	makeDropdown("MailCategory", 122, "Select Category", "Pick the type of item you want to send.", mailboxCategoryChoices, {
 		get = function() return state.mailCategory end,
@@ -10439,8 +10452,16 @@ runtime.YupisotesShowMisc = function()
 	refreshMail.Parent = mailContent
 	corner(refreshMail, 4)
 	refreshMail.MouseButton1Click:Connect(function()
+		local canvasPosition = list.CanvasPosition
 		state.mailReceiver = receiverInput.Text:match("^%s*(.-)%s*$") or ""
-		refreshMailItemChoices()
+		refreshMail.Text = "Refreshing..."
+		task.spawn(function()
+			task.wait(0.12)
+			local itemCount = refreshMailItemChoices()
+			list.CanvasPosition = canvasPosition
+			refreshMail.Text = "Refresh Item List"
+			screenGui:SetAttribute("MailboxStatus", "Refreshed " .. tostring(itemCount) .. " item name(s)")
+		end)
 	end)
 
 	local function makeMailInput(name, y, titleText, descriptionText, value, commit)
